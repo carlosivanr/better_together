@@ -1,0 +1,304 @@
+---
+# Cohort options are: 1, 2, or 3
+# Timepoint options are: baseline_arm_1, followup12m_arm_1
+params:
+  cohort: 1
+  timepoint: baseline_arm_1
+  
+title: "PATHWEIGH Practice Member Survey Report"
+subtitle:  "`r paste0(params$timepoint, ' Cohort ', params$cohort)`"
+date: "`r format(Sys.time(), '%B %d %Y')`"
+
+# Quarto docx settings ---------------------------------------------------------
+# fig height, width, and dpi set to prevent overplotting and image quality
+format:
+  docx:
+    toc: true
+    output-file: test.docx
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width = 7, dpi = 300)
+fig.height = 3.75
+```
+
+
+```{r load libraries}
+pacman::p_load(REDCapR,
+               here,
+               Hmisc,
+               tidyverse,
+               gtsummary,
+               furrr,
+               flextable)
+```
+
+```{r source functions and scripts}
+# *** This should be a function that takes in a cohort parameter
+source(here("functions", "fit_flextable_function.R"))
+source(here("functions", "create_report_table.R"))
+source(here("functions", "get_redcap_data.R"))
+```
+
+```{r}
+# Determine cohort from parameters
+if (params$cohort == 1){
+  project_id <- 25177
+  } else if (params$cohort == 2){
+  project_id <- 25050
+}
+
+# Get all data for 
+data <- get_redcap_data(project_id)
+
+# Source prep practice member survey data file which adds additional columns
+# where numerical values are set to factored, character responses
+source(here("./scripts/subscripts/prep_prac_mem_cohort.R"))
+
+data <- data %>% 
+  filter(redcap_event_name == params$timepoint)
+```
+
+
+```{r}
+# Create a vector of all unique clinics
+clinics <-
+  data %>%
+  drop_na(practice) %>%
+  select(practice) %>%
+  distinct() %>%
+  pull(practice)
+
+#
+plan(cluster, workers = 4)
+tables <- future_map(clinics, ~ create_report_tbl(.x))
+```
+
+# `r clinics[1]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[1]]))
+```
+
+\newpage
+
+# `r clinics[2]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[2]]))
+```
+
+
+\newpage
+
+# `r clinics[3]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[3]]))
+
+```
+
+
+\newpage
+
+# `r clinics[4]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[4]]))
+
+```
+
+
+\newpage
+
+# `r clinics[5]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[5]]))
+
+```
+
+\newpage
+
+# `r clinics[6]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[6]]))
+
+```
+
+
+\newpage
+
+# `r clinics[7]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[7]]))
+
+```
+
+\newpage
+
+# `r clinics[8]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[8]]))
+
+```
+
+\newpage
+
+# `r clinics[8]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[8]]))
+
+```
+
+\newpage
+
+# `r clinics[9]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[9]]))
+
+```
+
+\newpage
+
+# `r clinics[10]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[10]]))
+
+```
+
+\newpage
+
+# `r clinics[11]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[11]]))
+
+```
+
+\newpage
+
+# `r clinics[12]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[12]]))
+
+```
+
+\newpage
+
+# `r clinics[13]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[13]]))
+
+```
+
+
+\newpage
+
+# `r clinics[14]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[14]]))
+
+```
+
+\newpage
+
+# `r clinics[15]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[15]]))
+
+```
+
+
+\newpage
+
+# `r clinics[16]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[16]]))
+
+```
+
+\newpage
+
+# `r clinics[17]`
+```{r}
+fit_flextable_wordpage(as_flex_table(tables[[17]]))
+
+```
+
+
+
+
+```{r, table protoypes, echo = F, eval = F}
+# # Table Version 1:
+# # Create a table with the number or role_orig and sum of pathweigh complete and percent of pathweigh complete over role_orig
+# report <- left_join(
+#   data %>%
+#   group_by(practice, role_orig) %>%
+#   count() %>%
+#   rename("Count of role_orig" = n),
+#   
+#   data %>% 
+#   filter(pathweigh_practice_member_survey_complete == 2) %>%
+#   group_by(practice, role_orig) %>%
+#   count() %>%
+#   rename("Sum of pathweigh_practice_member_survey_complete" = n),
+#   by = c("practice", "role_orig")) %>%
+#   
+#   mutate(percent = round((`Sum of pathweigh_practice_member_survey_complete`/`Count of role_orig`) * 100        ,2))
+# 
+# kbl(report)
+# 
+# 
+# # Table Version 2:
+# # Make tables with gtsummary
+# # Table for AF Williams
+# clinics <- 
+#   data %>% 
+#   drop_na(practice) %>% 
+#   select(practice) %>% 
+#   distinct() %>% 
+#   pull(practice)
+# 
+# clinic <- "AF Williams"
+# 
+# 
+# create_report_tbl <- function(clinic){
+#   
+#   tbl_row_percent <- 
+#     data %>%
+#     filter(practice == clinic) %>%
+#     select(role_orig, pathweigh_practice_member_survey_complete.factor) %>%
+#     tbl_summary(by = pathweigh_practice_member_survey_complete.factor,
+#                 percent = "row")
+#   
+#   tbl_col_percent <- 
+#     data %>%
+#     filter(practice == clinic) %>%
+#     select(role_orig) %>%
+#     tbl_summary() %>%
+#     modify_header(all_stat_cols() ~ "**Overall**, N = {N}")
+#   
+#   tbl_final <-
+#     tbl_merge(list(tbl_col_percent, tbl_row_percent)) %>%
+#     modify_spanning_header(everything() ~ NA)
+#   
+#   tbl_final <- 
+#     tbl_final %>%
+#     modify_header(label = str_c("**", clinic, "**"))
+#   
+#   return(tbl_final)
+# }
+# 
+# create_report_tbl("AF Williams")
+# 
+# library(kableExtra)
+# library(tictoc)
+# library(furrr)
+# tic()
+# map(clinics, ~ create_report_tbl(.x))
+# toc()
+# 
+# 
+# plan(cluster, workers = 4)
+# 
+# tic()
+# tables <- future_map(clinics, ~ create_report_tbl(.x))
+# toc()
+```
+
