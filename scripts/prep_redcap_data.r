@@ -12,6 +12,22 @@ project_id <- 26979
 data <- get_redcap_data(project_id)
 
 # Prep data --------------------------------------------------------------------
+# Address that there's one person who reported Transgender, change to preserve
+# anonymity
+data %<>%
+  mutate(gender_identity = ifelse(gender_identity %in% c(3,4,5), NA, gender_identity))
+
+# Fill empty randomization variable from event name randomization_arm_1 into 
+# pre_arm_1
+# Only works if the value is an NA. 
+data %<>% 
+  mutate(randomization_complete = ifelse(is.na(randomization), NA, randomization_complete)) %>%
+  group_by(identifier) %>% 
+  fill(randomization_complete, .direction = "up") %>%
+  fill(randomization, .direction = "up") %>%
+  ungroup()
+  
+
 
 #Setting Labels
 
@@ -427,12 +443,6 @@ levels(data$post_test_additional_questions_complete.factor)=c("Incomplete","Unve
 levels(data$randomization.factor)=c("Waitlist","Intervention")
 levels(data$randomization_complete.factor)=c("Incomplete","Unverified","Complete")
 
-# Fill empty randomization variable from event name randomization_arm_1 into 
-# pre_arm_1
-data %<>% 
-  group_by(identifier) %>% 
-  fill(randomization.factor, .direction = "up") %>%
-  ungroup()
 
 
 # Remove identifying information
@@ -440,5 +450,26 @@ data %<>%
   select(-first_name, -last_name, -work_email, -firstname)
 
 
-# Save data
+# Address any missingness in the scs or mbi means
+# mbi1:mbi22
+# Sum will be greater than zero if there are any NAs
+data %>%
+  select(mbi1:mbi22) %>%
+  mutate(mbi_N_nas = rowSums(is.na(.))) %>%
+  select(mbi_N_nas) %>%
+  summarise(sum = sum())
+
+# scs1:scs12 
+# Sum will be greater than zero if there are any NAs
+data %>%
+  select(scs1:scs12) %>%
+  mutate(scs_N_nas = rowSums(is.na(.))) %>%
+  select(scs_N_nas) %>%
+  summarise(sum = sum())
+
+# Drop the signature column
+data %<>%
+  select(-enrollment_signature)
+
+# Save data --------------------------------------------------------------------
 save(data, file = here("data/prepped_data.Rdata"))
