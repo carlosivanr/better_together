@@ -2,6 +2,8 @@
 # Carlos Rodriguez, PhD. Dept. of Family Medicine, CU Anschutz Medical Campus
 # February 06, 2023
 
+# Updated by Kaitlyn Bertin (KB), ACCORDS - April 6, 2023
+
 # Make check all table:
 # This wrapper was created to generate frequency tables for RedCap data that are
 # check all that apply. For example, in questions of race and ethnicity, 
@@ -21,8 +23,8 @@
 ################################################################################
 
 
-
-make_check_all_tbl <- function(data, vars, by_var = NULL, grouping_label){
+# KB: in first line below, I added new argument "pct_digits" to define number of decimal places consistently. Set to 1 as default but that can be changed when running the function
+make_check_all_tbl <- function(data, vars, by_var = NULL, grouping_label, pct_digits = 1){
   # Create an index where the column sums are used to sort the variables -------
   index <- data %>% 
     select(all_of(vars)) %>%
@@ -35,7 +37,9 @@ make_check_all_tbl <- function(data, vars, by_var = NULL, grouping_label){
   # Create a basic gtsummary table ---------------------------------------------
   tbl <- data %>%
     select(all_of(c(ordered_vars, by_var))) %>%
-    tbl_summary(by = all_of(by_var))
+    tbl_summary(by = all_of(by_var),
+                digits = list(all_categorical() ~ c(0, pct_digits)) # KB added this line to define number of decimal places consistently for percentages (using new pct_digits argument above)
+                )
   
   # Create a named set of arguments --------------------------------------------
   # unpacked add_variable_grouping() from bstfun bc couldn't get the

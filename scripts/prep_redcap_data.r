@@ -11,25 +11,280 @@ source(here("scripts", "functions", "get_redcap_data.R"))
 project_id <- 26979
 data <- get_redcap_data(project_id)
 
-# Prep data --------------------------------------------------------------------
-# Address that there's one person who reported Transgender, change to preserve
-# anonymity
+# Gender Identity --------------------------------------------------------------
+
+# KB: checking original frequencies of this
+with(data, table(gender_identity))
+
+# One person reported Transgender in gender_identity, change their data values
+# to preserve anonymity
 data %<>%
   mutate(gender_identity = ifelse(gender_identity %in% c(3,4,5), NA, gender_identity))
 
-# Fill empty randomization variable from event name randomization_arm_1 into 
-# pre_arm_1
-# Only works if the value is an NA. 
+# Remove Rows where there are no randomization events --------------------------
 data %<>% 
+  filter(!identifier %in%
+                            (data %>%
+                              group_by(identifier) %>%
+                              count() %>%
+                              filter(n != 2) %>%
+                              pull(identifier))
+         )
+
+# Fill in randomization variables ----------------------------------------------
+# Fill in from event name randomization_arm_1 into pre_arm_1
+# Only works if the value to be filled in is an NA. Therefore, if randomization
+# is NA, then set randomization_complete to NA.
+data %<>%
   mutate(randomization_complete = ifelse(is.na(randomization), NA, randomization_complete)) %>%
   group_by(identifier) %>% 
   fill(randomization_complete, .direction = "up") %>%
   fill(randomization, .direction = "up") %>%
   ungroup()
-  
+ 
+
+# KB: Filter out the rows for randomization_arm_1 ------------------------------
+
+data <- data %>%
+  filter(redcap_event_name != "randomization_arm_1")
 
 
-#Setting Labels
+# KB: Calculate instrument scores - MBI ----------------------------------------
+
+# Note: option "na.rm=TRUE" allows missing items but excludes them from the mean. 
+# If we don't want to allow missing items (set subscale score to NA if any item is NA), then use na.rm=FALSE
+
+data2 <- data %>%
+  mutate(
+    
+    ## Maslach Burnout Inventory (MBI)
+    # Emotional Exhaustion (EE) subscale - items 1, 2, 3, 6, 8, 13, 14, 16, 20
+    mbi_ee = rowMeans(across(num_range("mbi", c(1:3, 6, 8, 13, 14, 16, 20))), na.rm=TRUE), # currently this allows missing items
+    # Depersonalization (DP) subscale - items 5, 10, 11, 15, 22
+    mbi_dp = rowMeans(across(num_range("mbi", c(5, 10, 11, 15, 22))), na.rm=TRUE),
+    # Personal Accomplishment (PA) subscale - items 4, 7, 9, 12, 17, 18, 19, 21
+    mbi_pa = rowMeans(across(num_range("mbi", c(4, 7, 9, 12, 17:19, 21))), na.rm=TRUE),
+    
+    countNA_mbi_ee9 = rowSums(is.na(across(num_range("mbi", c(1:3, 6, 8, 13, 14, 16, 20))))), # count how many items are missing (out of 9) for EE
+    countNA_mbi_dp5 = rowSums(is.na(across(num_range("mbi", c(5, 10, 11, 15, 22))))), # count how many items are missing (out of 5) for DP
+    countNA_mbi_pa8 = rowSums(is.na(across(num_range("mbi", c(4, 7, 9, 12, 17:19, 21))))), # count how many items are missing (out of 8) for PA
+    
+    ## Self-Compassion Scale - Short form (SCS-SF)
+    # https://self-compassion.org/wp-content/uploads/2021/03/SCS-SF-information.pdf
+    # Create new item variables with reverse scoring for items 1, 4, 8, 9, 11, 12
+    scssfnew1 = 6 - scs1,
+    scssfnew2 = scs2,
+    scssfnew3 = scs3,
+    scssfnew4 = 6 - scs4,
+    scssfnew5 = scs5,
+    scssfnew6 = scs6,
+    scssfnew7 = scs7,
+    scssfnew8 = 6 - scs8,
+    scssfnew9 = 6 - scs9,
+    scssfnew10 = scs10,
+    scssfnew11 = 6 - scs11,
+    scssfnew12 = 6 - scs12,
+    scssf_kind = rowMeans(across(num_range("scssfnew", c(2, 6))), na.rm=FALSE), # For now set to FALSE so subscale score not calculated if any item is missing
+    scssf_judg = rowMeans(across(num_range("scssfnew", c(11, 12))), na.rm=FALSE),
+    scssf_human = rowMeans(across(num_range("scssfnew", c(5, 10))), na.rm=FALSE),
+    scssf_isol = rowMeans(across(num_range("scssfnew", c(4, 8))), na.rm=FALSE),
+    scssf_mind = rowMeans(across(num_range("scssfnew", c(3, 7))), na.rm=FALSE),
+    scssf_ident = rowMeans(across(num_range("scssfnew", c(1, 9))), na.rm=FALSE),
+    scssf_tot = rowMeans(across(starts_with("scssf_")), na.rm=FALSE), # For now I set this to FALSE so we don't allow a missing subscale score for the total
+      # at least one participant (110) only answered one item (scs1) so if we allow any number of missing items, their over-identification and total scores are both based on that one item 
+      # TO DO: we should decide our own rules for missing items because the scoring instructions don't say 
+      # (and each subscale is only 2 items so if either is missing then the subscale is one item)
+    
+    countNA_scssf12 = rowSums(is.na(across(num_range("scs", c(1:12))))), # count how many items are missing (out of 12) for SCS-SF
+    
+    ## Moral Injury Symptom Scale – Healthcare Providers (MISS-HP)
+    # Create new item variables with reverse scoring for items 5, 6, 7, 10
+    misshpnew1 = miss1,
+    misshpnew2 = miss2,
+    misshpnew3 = miss3, 
+    misshpnew4 = miss4, 
+    misshpnew5 = 11 - miss5,
+    misshpnew6 = 11 - miss6,
+    misshpnew7 = 11 - miss7,
+    misshpnew8 = miss8,
+    misshpnew9 = miss9,
+    misshpnew10 = 11 - miss10,
+    # Calculate total score as sum of items
+    misshp_tot = rowSums(across(num_range("misshpnew", c(1:10))), na.rm=FALSE), # For now set to FALSE so sum score not calculated if any item is missing
+    
+    countNA_misshp10 = rowSums(is.na(across(num_range("miss", c(1:10))))), # count how many items are missing (out of 10) for MISS-HP
+    
+    ## Young Impostor Scale (YIS) - Responding “Yes” to 5 or more of these questions considered a positive finding of IS
+    countNA_yis8 = rowSums(is.na(across(num_range("yis", c(1:8))))), # count how many items are missing (out of 8) - to be used in count of "yes" responses below
+    # yis_count = rowSums(across(num_range("yis", c(1:8))), na.rm=TRUE), # count of "yes" responses - allows missing items
+    yis_count = if_else(countNA_yis8 == 8, NA_real_, rowSums(across(num_range("yis", c(1:8))), na.rm=TRUE)), # count of "yes" responses - allows missing items, unless all items missing
+    yis_ispos = if_else(yis_count >= 5, 1, 0, NA_real_),
+    
+    # Three-item Loneliness Scale (LS)
+    ls3_tot = rowSums(across(starts_with("ls_")), na.rm=FALSE), # don't calculate sum score if any items missing
+    ls3_lonely = if_else(ls3_tot >= 6, 1, 0, NA_real_), # dichotomize scores (>=6: lonely, 3-5: not lonely)
+    countNA_ls3 = rowSums(is.na(across(starts_with("ls_")))), # count how many items are missing (out of 3) for LS
+    
+    ## Flourish Index (FI) and Secure Flourish Index (SFI)
+    ## Domain-specific indices 
+    # D1. Happiness and life satisfaction
+    sfi_d1 = rowMeans(across(num_range("sfi", c(1, 2))), na.rm=FALSE),  # For now set to FALSE so domain score not calculated if an item is missing
+    # D2. Mental and physical health
+    sfi_d2 = rowMeans(across(num_range("sfi", c(3, 4))), na.rm=FALSE),
+    # D3. Meaning and purpose
+    sfi_d3 = rowMeans(across(num_range("sfi", c(5, 6))), na.rm=FALSE),
+    # D4. Character and virtue
+    sfi_d4 = rowMeans(across(num_range("sfi", c(7, 8))), na.rm=FALSE),
+    # D5. Close social relationships
+    sfi_d5 = rowMeans(across(num_range("sfi", c(9, 10))), na.rm=FALSE),
+    # D6. Financial and material stability
+    sfi_d6 = rowMeans(across(num_range("sfi", c(11, 12))), na.rm=FALSE),
+    # FI total score (mean of first 5 domain indices)
+    fi_tot = rowMeans(across(num_range("sfi_d", c(1:5))), na.rm=FALSE), # For now set to FALSE so total score not calculated if any domain score is missing
+    # SFI total score (mean of all 6 domain indices)
+    sfi_tot = rowMeans(across(num_range("sfi_d", c(1:6))), na.rm=FALSE), 
+    
+    countNA_sfi12 = rowSums(is.na(across(num_range("sfi", c(1:12))))), # count how many items are missing (out of 12) for SFI
+    countNA_fi10 = rowSums(is.na(across(num_range("sfi", c(1:10))))), # count how many items are missing (out of 10) for FI
+  )
+# %>%
+#   select(!(starts_with("scsnew"), starts_with("missnew")))
+
+data_check <- data2 %>%
+  select(identifier, redcap_event_name, starts_with("mbi"), starts_with("scs"), starts_with("miss"), 
+         starts_with("yis"), starts_with("ls"), starts_with("sfi"), starts_with("fi_"), starts_with("countNA_"))
+
+# data_check <- data2 %>%
+#   filter(identifier %in% c(26, 41, 100, 122, 146, 150, 172)) %>%
+#   select(identifier, redcap_event_name, starts_with("mbi"))
+
+# Checking counts of missing items for MBI scales - 5 participants are missing all items but will be excluded later anyway because randomization not = complete
+# with(data2, table(countNA_mbi_ee9))
+# with(data2, table(countNA_mbi_dp5))
+# with(data2, table(countNA_mbi_pa8))
+
+# Check participants missing all items for any scale
+data2 %>%
+  select(identifier, starts_with("countNA_")) %>%
+  filter(countNA_mbi_ee9 == 9 | countNA_mbi_dp5 == 5 | countNA_mbi_pa8 == 8 | countNA_scssf12 == 12 | countNA_misshp10 == 10 | countNA_yis8 == 8 |
+         countNA_ls3 == 3 | countNA_sfi12 == 12 | countNA_fi10 == 10)
+
+# Check participants missing all items on all scales
+data2 %>%
+  select(identifier, starts_with("countNA_")) %>%
+  filter(countNA_mbi_ee9 == 9 & countNA_mbi_dp5 == 5 & countNA_mbi_pa8 == 8 & countNA_scssf12 == 12 & countNA_misshp10 == 10 & countNA_yis8 == 8 &
+           countNA_ls3 == 3 & countNA_sfi12 == 12 & countNA_fi10 == 10)
+
+# Check any other participants missing at least one item on any scale (excluding those missing all items on all scales)
+data2 %>%
+  select(identifier, starts_with("countNA_")) %>%
+  filter(countNA_mbi_ee9 >= 1 | countNA_mbi_dp5 >= 1 | countNA_mbi_pa8 >= 1 | countNA_scssf12 >= 1 | countNA_misshp10 >= 1 | countNA_yis8 >= 1 |
+           countNA_ls3 >= 1 | countNA_sfi12 >= 1 | countNA_fi10 >= 1) %>%
+  filter(!(countNA_mbi_ee9 == 9 & countNA_mbi_dp5 == 5 & countNA_mbi_pa8 == 8 & countNA_scssf12 == 12 & countNA_misshp10 == 10 & countNA_yis8 == 8 &
+             countNA_ls3 == 3 & countNA_sfi12 == 12 & countNA_fi10 == 10)) %>%
+  print(n = 23)
+
+# Check participants missing SFI score but not FI score (because only domain 6 was missing)
+data2 %>%
+  select(identifier, starts_with("sfi_d"), sfi_tot, fi_tot) %>%
+  filter(is.na(sfi_tot)) 
+
+# Check participants missing at least 1 but not all YIS items
+data2 %>%
+  select(identifier, countNA_yis8, num_range("yis", c(1:8)), yis_count, yis_ispos) %>%
+  filter(countNA_yis8 >= 1 & countNA_yis8 < 8) 
+
+# Check participant 110
+data2 %>%
+  select(identifier, starts_with("scssf_"), starts_with("misshp_"), 
+         starts_with("yis_"), starts_with("ls3_"), starts_with("sfi_"), starts_with("fi_")) %>%
+  filter(identifier == 110)
+
+data <- data2
+ 
+
+
+# # Address any missingness -------------------------------------------------------
+# clean_subscale_means <- function(data, subscale_columns, subscale_name){
+#   # Get the ids of those with NAs in the subscale columns
+#   #print(subscale_columns)
+#   
+#   ids_w_na <-
+#   data %>%
+#   select(identifier, all_of(subscale_columns)) %>%
+#   mutate(N_nas = rowSums(is.na(.))) %>%
+#   select(identifier, N_nas) %>%
+#   filter(N_nas >= 1) %>%
+#   pull(identifier)
+#   
+#   #Set the subscale mean to NA if its in the list of Ids
+#   data %<>%
+#     mutate({{subscale_name}} := ifelse(identifier %in% ids_w_na, NA, {{subscale_name}}))
+#   
+#   return(data)
+#   }
+# 
+# ## MBI ----
+# # Emotional Exhaustion: sum of items 1, 2, 3, 6, 8, 13, 14, 16, 20
+# # Get the identifiers that NAs in the emotional exhaustion subscale
+# mbi_ee <- c("mbi1", "mbi2", "mbi3", "mbi6", "mbi8", "mbi13", "mbi14", "mbi16", "mbi20")
+# data <- clean_subscale_means(data, mbi_ee, "mbieemean")
+# 
+# # Depersonalization: sum of items 4, 7, 9, 12, 17, 18, 19, 21
+# mbi_dp <- c("mbi4", "mbi7", "mbi9", "mbi12", "mbi17", "mbi18", "mbi19", "mbi21")
+# data <- clean_subscale_means(data, mbi_dp, "mbidpmean")
+# 
+# # Personal accomplishment: sum of items 5, 10, 11, 15, 22
+# mbi_pa <- c("mbi5", "mbi10", "mbi11", "mbi15", "mbi22")
+# data <- clean_subscale_means(data, mbi_pa, "mbipamean")
+# 
+# # SCS
+# 
+# # YIS
+# 
+# # MISS
+# 
+# # SFI
+# 
+# # UCLA
+# 
+# ## SCS -------------------------------------------------------------------------
+# ### LEFT OFF HERE ######################
+# ### Need to identify which values go into the calculation of mean, and so set an 
+# # NA if there are any missing values
+# # Need to also change what file this script writes to, and possibly rename
+# # this script to indicate it's only for the data at time point 1.
+# # 
+# scsoveridentificationmean
+# # calc scs1, scs9, reverse coded 
+# 
+# 
+# selfjudgmentmean
+# # calc scs11, scs12, reverse coded
+# 
+# scsisolationscoremean
+# # calc scs4, scs8, reverse coded
+# 
+# 
+# scsselfkindnessmean
+# # calc scs2, scs6
+# 
+# scscommonhumanitymean
+# # calc scs5, scs10
+# 
+# 
+# scsmindfulnessmean
+# # calc scs3, scs7
+# 
+# #Total
+# scs_total <- names(data %>% select(scsoveridentificationmean:scsmindfulnessmean))
+# data <- clean_subscale_means(data, scs_total, "scstotalmean")
+
+
+
+# RedCap data processing -------------------------------------------------------
+
+# Setting Labels
 
 label(data$identifier)="Identifier"
 label(data$redcap_event_name)="Event Name"
@@ -113,49 +368,49 @@ label(data$mbi5)="I feel I treat some patients as if they were impersonal object
 label(data$mbi6)="Working with people all day is really a strain for me"
 label(data$mbi7)="I deal very effectively with the problems of my patients"
 label(data$mbi8)="I feel burned out from my work"
-label(data$mbi9)="I feel Im positively influencing other peoples lives through my work"
-label(data$mbi10)="Ive become more callous towards patients since I started this job"
+label(data$mbi9)="I feel I'm positively influencing other people's lives through my work"
+label(data$mbi10)="I've become more callous towards patients since I started this job"
 label(data$mbi11)="I worry that this job is hardening me emotionally"
 label(data$mbi12)="I feel very energetic"
 label(data$mbi13)="I feel frustrated by my job"
 label(data$mbi14)="I feel Im working too hard at my job"
-label(data$mbi15)="I dont really care what happens to some patients"
+label(data$mbi15)="I don't really care what happens to some patients"
 label(data$mbi16)="Working with people directly puts too much stress on me"
 label(data$mbi17)="I can easily create a relaxed atmosphere with my patients"
 label(data$mbi18)="I feel exhilarated after working closely with my patients"
 label(data$mbi19)="I have accomplished many worthwhile things in this job"
-label(data$mbi20)="I feel like Im at the end of my rope"
+label(data$mbi20)="I feel like I'm at the end of my rope"
 label(data$mbi21)="In my work I deal with emotional problems very calmly"
 label(data$mbi22)="I feel patients blame me for some of their problems"
 label(data$scs1)="When I fail at something important to me, I become consumed by feelings of inadequacy."
-label(data$scs2)="I try to be understanding and patient towards those aspects of my personality I dont like."
+label(data$scs2)="I try to be understanding and patient towards those aspects of my personality I don't like."
 label(data$scs3)="When something painful happens I try to take a balanced view of the situation."
-label(data$scs4)="When Im feeling down, I tend to feel like most other people are probably happier than I am."
+label(data$scs4)="When I'm feeling down, I tend to feel like most other people are probably happier than I am."
 label(data$scs5)="I try to see my failings as part of the human condition."
-label(data$scs6)="When Im going through a very hard time, I give myself the caring and tenderness I need."
+label(data$scs6)="When I'm going through a very hard time, I give myself the caring and tenderness I need."
 label(data$scs7)="When something upsets me I try to keep my emotions in balance."
-label(data$scs8)="When I fail at something thats important to me, I tend to feel alone in my failure."
-label(data$scs9)="When Im feeling down I tend to obsess and fixate on everything thats wrong."
+label(data$scs8)="When I fail at something that's important to me, I tend to feel alone in my failure."
+label(data$scs9)="When I'm feeling down I tend to obsess and fixate on everything that's wrong."
 label(data$scs10)="When I feel inadequate in some way, I try to remind myself that feelings of inadequacy are shared by most people."
-label(data$scs11)="Im disapproving and judgmental about my own flaws and inadequacies."
-label(data$scs12)="Im intolerant and impatient towards those aspects of my personality I dont like."
-label(data$yis1)="Do you secretly worry that others will find out youre not as bright and capable as they think you are?"
+label(data$scs11)="I'm disapproving and judgmental about my own flaws and inadequacies."
+label(data$scs12)="I'm intolerant and impatient towards those aspects of my personality I don't like."
+label(data$yis1)="Do you secretly worry that others will find out you're not as bright and capable as they think you are?"
 label(data$yis2)="Do you sometimes shy away from challenges because of nagging self doubt?"
-label(data$yis3)="Do you tend to chalk your accomplishments up to being a fluke no big deal or the fact that people just like you?"
+label(data$yis3)="Do you tend to chalk your accomplishments up to being a 'fluke', 'no big deal' or the fact that people just 'like' you?"
 label(data$yis4)="Do you hate making a mistake, not being fully prepared or not doing things perfectly?"
 label(data$yis5)="Do you tend to feel crushed by constructive criticism, seeing it as evidence of your ineptness?"
-label(data$yis6)="When you do succeed, do you think Phew! I fooled them this time, but may not be so lucky next time?"
+label(data$yis6)="When you do succeed, do you think 'Phew! I fooled them this time, but may not be so lucky next time'?"
 label(data$yis7)="Do you believe that your peers are smarter and more capable than you?"
 label(data$yis8)="Do you live in fear of being found out, discovered or unmasked?"
 label(data$miss1)="I feel betrayed by other health professionals whom I once trusted."
 label(data$miss2)="I feel guilt over failing to save someone from being seriously injured or dying."
-label(data$miss3)="I feel ashamed about what Ive done or not done when providing care to my patients."
+label(data$miss3)="I feel ashamed about what I've done or not done when providing care to my patients."
 label(data$miss4)="I am troubled by having acted in ways that violated my own morals or values."
 label(data$miss5)="Most people with whom I work as a health professional are trustworthy."
 label(data$miss6)="I have a good sense of what makes my life meaningful as a health professional."
 label(data$miss7)="I have forgiven myself for whats happened to me or to others whom I have cared for."
-label(data$miss8)="All in all, I am inclined to feel that Im a failure in my work as a health professional."
-label(data$miss9)="I sometimes feel I am being punished for what Ive done or not done while caring for patients."
+label(data$miss8)="All in all, I am inclined to feel that I'm a failure in my work as a health professional."
+label(data$miss9)="I sometimes feel I am being punished for what I've done or not done while caring for patients."
 label(data$miss10)="Compared to before I went through these experiences, my religious/spiritual faith has strengthened."
 label(data$sfi1)="Overall, how satisfied are you with life as a whole these days?"
 label(data$sfi2)="In general, how happy or unhappy do you usually feel?"
@@ -189,10 +444,37 @@ label(data$barriers)="Please tell us about any barriers or challenges that made 
 label(data$post_test_additional_questions_complete)="Complete?"
 label(data$randomization)="Randomization group"
 label(data$randomization_complete)="Complete?"
-#Setting Units
+
+# KB ADDED these for the new calculated instrument scores
+label(data$mbi_ee) = "MBI: Emotional Exhaustion subscale score"
+label(data$mbi_dp) = "MBI: Depersonalization subscale score"
+label(data$mbi_pa) = "MBI: Personal Accomplishment subscale score"
+label(data$scssf_kind) = "SCS-SF: Self-kindness subscale score"
+label(data$scssf_judg) = "SCS-SF: Self-judgment subscale score"
+label(data$scssf_human) = "SCS-SF: Common humanity subscale score"
+label(data$scssf_isol) = "SCS-SF: Isolation subscale score"
+label(data$scssf_mind) = "SCS-SF: Mindfulness subscale score"
+label(data$scssf_ident) = "SCS-SF: Over-identification subscale score"
+label(data$scssf_tot) = "SCS-SF: Self-compassion total score"
+label(data$misshp_tot) = "MISS-HP: Moral injury (healthcare professionals) total score"
+label(data$yis_count) = "YIS: Sum score (count of 'Yes' responses)"
+label(data$yis_ispos) = "YIS: Impostor syndrome present"
+label(data$ls3_tot) = "3-Item Loneliness Scale: Total (sum) score"
+label(data$ls3_lonely) = "3-Item Loneliness Scale: Lonely"
+label(data$sfi_d1) = "SFI/FI: D1 (Happiness and life satisfaction domain) score"
+label(data$sfi_d2) = "SFI/FI: D2 (Mental and physical health domain) score"
+label(data$sfi_d3) = "SFI/FI: D3 (Meaning and purpose domain) score"
+label(data$sfi_d4) = "SFI/FI: D4 (Character and virtue domain) score"
+label(data$sfi_d5) = "SFI/FI: D5 (Close social relationships domain) score"
+label(data$sfi_d6) = "SFI: D6 (Financial and material stability domain) score"
+label(data$sfi_tot) = "SFI: Total score"
+label(data$fi_tot) = "FI: Total score"
+
+# Setting Units
 
 
-#Setting Factors(will create new variable for factors)
+# Setting Factors (will create new variable for factors)
+
 data$redcap_event_name.factor = factor(data$redcap_event_name,levels=c("pre_arm_1","post_arm_1","randomization_arm_1"))
 data$enrollment_agreement.factor = factor(data$enrollment_agreement,levels=c("1","0"))
 data$consent_complete.factor = factor(data$consent_complete,levels=c("0","1","2"))
@@ -317,6 +599,12 @@ data$pe_recommend.factor = factor(data$pe_recommend,levels=c("1","2","3","4","5"
 data$post_test_additional_questions_complete.factor = factor(data$post_test_additional_questions_complete,levels=c("0","1","2"))
 data$randomization.factor = factor(data$randomization,levels=c("0","1"))
 data$randomization_complete.factor = factor(data$randomization_complete,levels=c("0","1","2"))
+
+data$yis_ispos.factor = factor(data$yis_ispos,levels=c("0","1")) # KB ADDED - create factor variable for dichotomous impostor syndrome present/absent
+label(data$yis_ispos.factor) = "YIS: Impostor syndrome present"
+
+data$ls3_lonely.factor = factor(data$ls3_lonely,levels=c("0","1")) # KB ADDED - create factor variable for dichotomous lonely/not lonely
+label(data$ls3_lonely.factor) = "3-Item Loneliness Scale: Lonely"
 
 levels(data$redcap_event_name.factor)=c("Pre","Post","Randomization")
 levels(data$enrollment_agreement.factor)=c("Yes","No")
@@ -443,33 +731,46 @@ levels(data$post_test_additional_questions_complete.factor)=c("Incomplete","Unve
 levels(data$randomization.factor)=c("Waitlist","Intervention")
 levels(data$randomization_complete.factor)=c("Incomplete","Unverified","Complete")
 
-
+levels(data$yis_ispos.factor) = c("No","Yes") # KB ADDED - create factor variable for dichotomous impostor syndrome present/absent
+levels(data$ls3_lonely.factor) = c("No","Yes") # KB ADDED - create factor variable for dichotomous lonely/not lonely
 
 # Remove identifying information
 data %<>% 
-  select(-first_name, -last_name, -work_email, -firstname)
+  select(-first_name, -last_name, -work_email, -firstname, -enrollment_signature)
 
 
-# Address any missingness in the scs or mbi means
-# mbi1:mbi22
-# Sum will be greater than zero if there are any NAs
-data %>%
-  select(mbi1:mbi22) %>%
-  mutate(mbi_N_nas = rowSums(is.na(.))) %>%
-  select(mbi_N_nas) %>%
-  summarise(sum = sum())
 
-# scs1:scs12 
-# Sum will be greater than zero if there are any NAs
-data %>%
-  select(scs1:scs12) %>%
-  mutate(scs_N_nas = rowSums(is.na(.))) %>%
-  select(scs_N_nas) %>%
-  summarise(sum = sum())
 
-# Drop the signature column
-data %<>%
-  select(-enrollment_signature)
+  
 
+
+
+# KB: missing data issues for participant 110 now already addressed above
+
+# Participant 110
+# Participant 110 does not have complete data for several instruments.
+# data %>%
+#   select(identifier, scs1:scs12) %>%
+#   mutate(scs_N_nas = rowSums(is.na(.))) %>%
+#   select(identifier, scs_N_nas) %>%
+#   filter(scs_N_nas >=1)
+
+# data %<>% mutate(across(starts_with("scs"), ~ifelse(identifier == 110, NA, .x)))
+
+
+
+# This data should only be for the first time point. A second script should be
+# set up for the second time point.
 # Save data --------------------------------------------------------------------
+save(data, file = here("data/pre_arm_1_prepped_data.Rdata"))
 save(data, file = here("data/prepped_data.Rdata"))
+
+# 
+# # Load Data --------------------------------------------------------------------
+# load(here("data", "prepped_data.Rdata"))
+# 
+# # Filter to the first time point and only those that are complete in randomization
+# # will omit any that are unverified
+# data %<>%
+#   filter(redcap_event_name == "pre_arm_1") %>%
+#   filter(randomization_complete.factor == "Complete")

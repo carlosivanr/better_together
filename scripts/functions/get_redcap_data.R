@@ -4,7 +4,7 @@
 #
 # Description:
 # This function was designed to automatically get/update all RedCap data from  
-# the Better Together survey
+# any redca project.
 #
 # Requirements:
 # This function relies on the REDCapR package.
