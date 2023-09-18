@@ -174,21 +174,21 @@ label(data$cohort)="Which cohort are you in  (i.e., during which months were you
 # label(data$randomization_complete)="Complete?"
 
 # KB ADDED these for the new calculated instrument scores
-label(data$mbi_ee_avg) = "MBI: Emotional Exhaustion subscale score (average)"
-label(data$mbi_dp_avg) = "MBI: Depersonalization subscale score (average)"
-label(data$mbi_pa_avg) = "MBI: Personal Accomplishment subscale score (average)"
+# label(data$mbi_ee_avg) = "MBI: Emotional Exhaustion subscale score (average)"
+# label(data$mbi_dp_avg) = "MBI: Depersonalization subscale score (average)"
+# label(data$mbi_pa_avg) = "MBI: Personal Accomplishment subscale score (average)"
 
-label(data$mbi_avg_ee) = "MBI: Emotional Exhaustion subscale score (average)"
-label(data$mbi_avg_dp) = "MBI: Depersonalization subscale score (average)"
-label(data$mbi_avg_pa) = "MBI: Personal Accomplishment subscale score (average)"
+# label(data$mbi_avg_ee) = "MBI: Emotional Exhaustion subscale score (average)"
+# label(data$mbi_avg_dp) = "MBI: Depersonalization subscale score (average)"
+# label(data$mbi_avg_pa) = "MBI: Personal Accomplishment subscale score (average)"
 
 label(data$mbi_ee_sum) = "MBI: Emotional Exhaustion subscale score (sum)"
 label(data$mbi_dp_sum) = "MBI: Depersonalization subscale score (sum)"
 label(data$mbi_pa_sum) = "MBI: Personal Accomplishment subscale score (sum)"
-
-label(data$mbi_sum_ee) = "MBI: Emotional Exhaustion subscale score (sum)"
-label(data$mbi_sum_dp) = "MBI: Depersonalization subscale score (sum)"
-label(data$mbi_sum_pa) = "MBI: Personal Accomplishment subscale score (sum)"
+ 
+# label(data$mbi_sum_ee) = "MBI: Emotional Exhaustion subscale score (sum)"
+# label(data$mbi_sum_dp) = "MBI: Depersonalization subscale score (sum)"
+# label(data$mbi_sum_pa) = "MBI: Personal Accomplishment subscale score (sum)"
 
 # label(data$scssf_kind) = "SCS-SF: Self-kindness subscale score"
 # label(data$scssf_judg) = "SCS-SF: Self-judgment subscale score"
@@ -196,7 +196,7 @@ label(data$mbi_sum_pa) = "MBI: Personal Accomplishment subscale score (sum)"
 # label(data$scssf_isol) = "SCS-SF: Isolation subscale score"
 # label(data$scssf_mind) = "SCS-SF: Mindfulness subscale score"
 # label(data$scssf_ident) = "SCS-SF: Over-identification subscale score"
-label(data$scssf_tot) = "SCS-SF: Self-compassion total score (average)"
+#label(data$scssf_tot) = "SCS-SF: Self-compassion total score (average)"
 
 label(data$scssf_avg_kind) = "SCS-SF: Self-kindness subscale score (average)"
 label(data$scssf_avg_judg) = "SCS-SF: Self-judgment subscale score (average)"
@@ -206,19 +206,19 @@ label(data$scssf_avg_mind) = "SCS-SF: Mindfulness subscale score (average)"
 label(data$scssf_avg_ident) = "SCS-SF: Over-identification subscale score (average)"
 label(data$scssf_avg_tot) = "SCS-SF: Self-compassion total score (average)"
 
-label(data$scssf_sum_kind) = "SCS-SF: Self-kindness subscale score (sum)"
-label(data$scssf_sum_judg) = "SCS-SF: Self-judgment subscale score (sum)"
-label(data$scssf_sum_human) = "SCS-SF: Common humanity subscale score (sum)"
-label(data$scssf_sum_isol) = "SCS-SF: Isolation subscale score (sum)"
-label(data$scssf_sum_mind) = "SCS-SF: Mindfulness subscale score (sum)"
-label(data$scssf_sum_ident) = "SCS-SF: Over-identification subscale score (sum)"
+# label(data$scssf_sum_kind) = "SCS-SF: Self-kindness subscale score (sum)"
+# label(data$scssf_sum_judg) = "SCS-SF: Self-judgment subscale score (sum)"
+# label(data$scssf_sum_human) = "SCS-SF: Common humanity subscale score (sum)"
+# label(data$scssf_sum_isol) = "SCS-SF: Isolation subscale score (sum)"
+# label(data$scssf_sum_mind) = "SCS-SF: Mindfulness subscale score (sum)"
+# label(data$scssf_sum_ident) = "SCS-SF: Over-identification subscale score (sum)"
 label(data$scssf_sum_tot) = "SCS-SF: Self-compassion total score (sum)"
 
 label(data$misshp_tot) = "MISS-HP: Moral injury (healthcare professionals) total score"
-label(data$yis_count) = "YIS: Sum score (count of 'Yes' responses)"
-label(data$yis_ispos) = "YIS: Impostor syndrome present"
-label(data$ls3_tot) = "3-Item Loneliness Scale: Total (sum) score"
-label(data$ls3_lonely) = "3-Item Loneliness Scale: Lonely"
+#label(data$yis_count) = "YIS: Sum score (count of 'Yes' responses)"
+#label(data$yis_ispos) = "YIS: Impostor syndrome present"
+#label(data$ls3_tot) = "3-Item Loneliness Scale: Total (sum) score"
+#label(data$ls3_lonely) = "3-Item Loneliness Scale: Lonely"
 label(data$sfi_d1) = "SFI/FI: D1 (Happiness and life satisfaction domain) score"
 label(data$sfi_d2) = "SFI/FI: D2 (Mental and physical health domain) score"
 label(data$sfi_d3) = "SFI/FI: D3 (Meaning and purpose domain) score"
@@ -504,12 +504,11 @@ levels(data$randomization.factor)=c("Waitlist","Intervention")
 levels(data$randomization_complete.factor)=c("Incomplete","Unverified","Complete")
 
 # Process user-created columns -------------------------------------------------
-data$yis_ispos.factor = factor(data$yis_ispos,levels=c("0","1")) # KB ADDED - create factor variable for dichotomous impostor syndrome present/absent
-levels(data$yis_ispos.factor) = c("No","Yes") # KB ADDED - create factor variable for dichotomous impostor syndrome present/absent
-label(data$yis_ispos.factor) = "YIS: Impostor syndrome present"
+#data$yis_ispos.factor = factor(data$yis_ispos,levels=c("0","1")) # KB ADDED - create factor variable for dichotomous impostor syndrome present/absent
+# levels(data$yis_ispos.factor) = c("No","Yes") # KB ADDED - create factor variable for dichotomous impostor syndrome present/absent
+# label(data$yis_ispos.factor) = "YIS: Impostor syndrome present"
 
 
-data$ls3_lonely.factor = factor(data$ls3_lonely,levels=c("0","1")) # KB ADDED - create factor variable for dichotomous lonely/not lonely
-label(data$ls3_lonely.factor) = "3-Item Loneliness Scale: Lonely"
-levels(data$ls3_lonely.factor) = c("No","Yes") # KB ADDED - create factor variable for dichotomous lonely/not lonely
-
+# data$ls3_lonely.factor = factor(data$ls3_lonely,levels=c("0","1")) # KB ADDED - create factor variable for dichotomous lonely/not lonely
+# label(data$ls3_lonely.factor) = "3-Item Loneliness Scale: Lonely"
+# levels(data$ls3_lonely.factor) = c("No","Yes") # KB ADDED - create factor variable for dichotomous lonely/not lonely

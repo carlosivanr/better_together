@@ -38,9 +38,11 @@ project_id <- 26979
 data <- get_redcap_data(project_id)
 
 # Process the randomization rows  ----------------------------------------------
-# Each participant can be associated with 3 distinct events, randomization, pre,
-# and post intervention. Randomization events will not contain any data for the
-# pre/post outcomes and need to be removed.
+# Each participant is associated with up to 3 distinct events in the redcap data
+# 1) randomization, 2) pre-, and 3) post-intervention. Randomization events will
+# not contain any data for the pre or post outcomes and need to be removed. The
+# randomization event contains the values that indicate wich treatment the 
+# participant was randomized to.
 
 # Filter the unique randomization event variables to a separate data frame
 randomization_arm_1 <- 
@@ -48,216 +50,196 @@ randomization_arm_1 <-
   filter(redcap_event_name == "randomization_arm_1") %>%
   select(identifier, randomization, randomization_complete)
 
-# Remove randomization rows and columns
+# Remove randomization rows and columns from the main redcap data
 data %<>%
   filter(redcap_event_name != "randomization_arm_1") %>%
   select(-randomization, -randomization_complete)
 
-# Join in randomization (treatment) and randomization complete values
+# Join in randomization (treatment) and randomization complete values so that
+# missing data from the instruments in the randomization event is cleared out
 data %<>%
   left_join(., 
             select(randomization_arm_1, identifier, randomization, randomization_complete), 
             by = "identifier")
 
-# KB: Calculate instrument scores ----------------------------------------------
-
+# Calculate instrument scores --------------------------------------------------
 # Note: option "na.rm=TRUE" allows missing items but excludes them from the mean. 
 # If we don't want to allow missing items (set subscale score to NA if any 
 # item is NA), then use na.rm=FALSE
 
-data2 <- data %>%
+## Maslach Burnout Inventory (MBI) ---------------------------------------------
+# Emotional Exhaustion (EE) subscale: items 1, 2, 3, 6, 8, 13, 14, 16, 20
+mbi_ee <- c(1:3, 6, 8, 13, 14, 16, 20)
+
+# Depersonalization (DP) subscale: items 5, 10, 11, 15, 22
+mbi_dp <- c(5, 10, 11, 15, 22)
+
+# Personal Accomplishment (PA) subscale: items 4, 7, 9, 12, 17, 18, 19, 21
+mbi_pa <- c(4, 7, 9, 12, 17:19, 21)
+
+# Calculate the sum score, if an item is missing, a total score is still 
+# calculated. Switch na.rm arg from T to F to not allow missing single items
+# Calculate the number of missing items in each subscale and create a binary
+# variable to indicate if any single item was missing for filtering data 
+data %<>%
   mutate(
+    mbi_ee_sum = rowSums(across(num_range("mbi", mbi_ee)), na.rm = T), # na.rm=T so sum score not calculated if any item is missing
+    mbi_ee_n_na_items = rowSums(is.na(across(num_range("mbi", mbi_ee)))), # count how many items are missing (out of 9) for EE
+    mbi_ee_bin_na_items = ifelse(mbi_ee_n_na_items,1,0),
     
-    ## Maslach Burnout Inventory (MBI)
-    
-    # Emotional Exhaustion (EE) subscale: items 1, 2, 3, 6, 8, 13, 14, 16, 20
-    # Depersonalization (DP) subscale: items 5, 10, 11, 15, 22
-    # Personal Accomplishment (PA) subscale: items 4, 7, 9, 12, 17, 18, 19, 21
-    
-    # Scores as item means/averages
-    mbi_ee_avg = rowMeans(across(num_range("mbi", c(1:3, 6, 8, 13, 14, 16, 20))), na.rm=TRUE), # currently this allows missing items
-    mbi_dp_avg = rowMeans(across(num_range("mbi", c(5, 10, 11, 15, 22))), na.rm=TRUE),
-    mbi_pa_avg = rowMeans(across(num_range("mbi", c(4, 7, 9, 12, 17:19, 21))), na.rm=TRUE),
-    
-    # same as above, just different variable names (moved "avg" from suffix to prefix for consistency with new SCS variables)
-    mbi_avg_ee = rowMeans(across(num_range("mbi", c(1:3, 6, 8, 13, 14, 16, 20))), na.rm=TRUE), # currently this allows missing items
-    mbi_avg_dp = rowMeans(across(num_range("mbi", c(5, 10, 11, 15, 22))), na.rm=TRUE),
-    mbi_avg_pa = rowMeans(across(num_range("mbi", c(4, 7, 9, 12, 17:19, 21))), na.rm=TRUE),
-    
-    # Scores as item sums
-    mbi_ee_sum = rowSums(across(num_range("mbi", c(1:3, 6, 8, 13, 14, 16, 20))), na.rm=FALSE), # na.rm=FALSE so sum score not calculated if any item is missing
-    mbi_dp_sum = rowSums(across(num_range("mbi", c(5, 10, 11, 15, 22))), na.rm=FALSE),
-    mbi_pa_sum = rowSums(across(num_range("mbi", c(4, 7, 9, 12, 17:19, 21))), na.rm=FALSE),
-    
-    # same as above, just different variable names (moved "sum" from suffix to prefix for consistency with new SCS variables)
-    mbi_sum_ee = rowSums(across(num_range("mbi", c(1:3, 6, 8, 13, 14, 16, 20))), na.rm=FALSE), # na.rm=FALSE so sum score not calculated if any item is missing
-    mbi_sum_dp = rowSums(across(num_range("mbi", c(5, 10, 11, 15, 22))), na.rm=FALSE), 
-    mbi_sum_pa = rowSums(across(num_range("mbi", c(4, 7, 9, 12, 17:19, 21))), na.rm=FALSE), 
-    
-    # count of items missing for each subscale
-    countNA_mbi_ee9 = rowSums(is.na(across(num_range("mbi", c(1:3, 6, 8, 13, 14, 16, 20))))), # count how many items are missing (out of 9) for EE
-    countNA_mbi_dp5 = rowSums(is.na(across(num_range("mbi", c(5, 10, 11, 15, 22))))), # count how many items are missing (out of 5) for DP
-    countNA_mbi_pa8 = rowSums(is.na(across(num_range("mbi", c(4, 7, 9, 12, 17:19, 21))))), # count how many items are missing (out of 8) for PA
-    
-    
-    ## Self-Compassion Scale - Short form (SCS-SF)
-    
-    # https://self-compassion.org/wp-content/uploads/2021/03/SCS-SF-information.pdf
-    # Create new item variables with reverse scoring for items 1, 4, 8, 9, 11, 12
-    scssfnew1 = 6 - scs1,
-    scssfnew2 = scs2,
-    scssfnew3 = scs3,
-    scssfnew4 = 6 - scs4,
-    scssfnew5 = scs5,
-    scssfnew6 = scs6,
-    scssfnew7 = scs7,
-    scssfnew8 = 6 - scs8,
-    scssfnew9 = 6 - scs9,
-    scssfnew10 = scs10,
-    scssfnew11 = 6 - scs11,
-    scssfnew12 = 6 - scs12,
-    
-      # Note: at least one participant (110) only answered one item (scs1) so if we allow any number of missing items, 
-      # that person's over-identification and total scores are both based on that one item 
-    
-      # TO DO: we should decide our own rules for missing items because the scoring instructions don't say 
-      # (and each subscale is only 2 items so if either is missing then the subscale is one item)
-    
-    # Scores as item means
-    # scssf_kind = rowMeans(across(num_range("scssfnew", c(2, 6))), na.rm=FALSE), # For now set to FALSE so subscale score not calculated if any item is missing
-    # scssf_judg = rowMeans(across(num_range("scssfnew", c(11, 12))), na.rm=FALSE),
-    # scssf_human = rowMeans(across(num_range("scssfnew", c(5, 10))), na.rm=FALSE),
-    # scssf_isol = rowMeans(across(num_range("scssfnew", c(4, 8))), na.rm=FALSE),
-    # scssf_mind = rowMeans(across(num_range("scssfnew", c(3, 7))), na.rm=FALSE),
-    # scssf_ident = rowMeans(across(num_range("scssfnew", c(1, 9))), na.rm=FALSE),
-    # scssf_tot = rowMeans(across(starts_with("scssf_")), na.rm=FALSE), # For now I set this to FALSE so we don't allow a missing subscale score for the total
-    scssf_avg_kind = rowMeans(across(num_range("scssfnew", c(2, 6))), na.rm=FALSE), # For now set to FALSE so subscale score not calculated if any item is missing
-    scssf_avg_judg = rowMeans(across(num_range("scssfnew", c(11, 12))), na.rm=FALSE),
-    scssf_avg_human = rowMeans(across(num_range("scssfnew", c(5, 10))), na.rm=FALSE),
-    scssf_avg_isol = rowMeans(across(num_range("scssfnew", c(4, 8))), na.rm=FALSE),
-    scssf_avg_mind = rowMeans(across(num_range("scssfnew", c(3, 7))), na.rm=FALSE),
-    scssf_avg_ident = rowMeans(across(num_range("scssfnew", c(1, 9))), na.rm=FALSE),
-    scssf_avg_tot = rowMeans(across(starts_with("scssf_avg_")), na.rm=FALSE), # For now I set this to FALSE so we don't allow a missing subscale score for the total
-    scssf_tot = scssf_avg_tot,
-    
-    # Scores as item sums
-    scssf_sum_kind = rowSums(across(num_range("scssfnew", c(2, 6))), na.rm=FALSE), # Set to FALSE so score not calculated if any item is missing
-    scssf_sum_judg = rowSums(across(num_range("scssfnew", c(11, 12))), na.rm=FALSE),
-    scssf_sum_human = rowSums(across(num_range("scssfnew", c(5, 10))), na.rm=FALSE),
-    scssf_sum_isol = rowSums(across(num_range("scssfnew", c(4, 8))), na.rm=FALSE),
-    scssf_sum_mind = rowSums(across(num_range("scssfnew", c(3, 7))), na.rm=FALSE),
-    scssf_sum_ident = rowSums(across(num_range("scssfnew", c(1, 9))), na.rm=FALSE),
-    scssf_sum_tot = rowSums(across(starts_with("scssf_sum_")), na.rm=FALSE), 
-    
-    countNA_scssf12 = rowSums(is.na(across(num_range("scs", c(1:12))))), # count how many items are missing (out of 12) for SCS-SF
-    
-    ## Moral Injury Symptom Scale – Healthcare Providers (MISS-HP)
-    # Create new item variables with reverse scoring for items 5, 6, 7, 10
-    misshpnew1 = miss1,
-    misshpnew2 = miss2,
-    misshpnew3 = miss3, 
-    misshpnew4 = miss4, 
-    misshpnew5 = 11 - miss5,
-    misshpnew6 = 11 - miss6,
-    misshpnew7 = 11 - miss7,
-    misshpnew8 = miss8,
-    misshpnew9 = miss9,
-    misshpnew10 = 11 - miss10,
-    # Calculate total score as sum of items
-    misshp_tot = rowSums(across(num_range("misshpnew", c(1:10))), na.rm=FALSE), # For now set to FALSE so sum score not calculated if any item is missing
-    
-    countNA_misshp10 = rowSums(is.na(across(num_range("miss", c(1:10))))), # count how many items are missing (out of 10) for MISS-HP
-    
-    ## Young Impostor Scale (YIS) - Responding “Yes” to 5 or more of these questions considered a positive finding of IS
-    countNA_yis8 = rowSums(is.na(across(num_range("yis", c(1:8))))), # count how many items are missing (out of 8) - to be used in count of "yes" responses below
-    # yis_count = rowSums(across(num_range("yis", c(1:8))), na.rm=TRUE), # count of "yes" responses - allows missing items
-    yis_count = if_else(countNA_yis8 == 8, NA_real_, rowSums(across(num_range("yis", c(1:8))), na.rm=TRUE)), # count of "yes" responses - allows missing items, unless all items missing
-    yis_ispos = if_else(yis_count >= 5, 1, 0, NA_real_),
-    
-    # Three-item Loneliness Scale (LS)
-    ls3_tot = rowSums(across(starts_with("ls_")), na.rm=FALSE), # don't calculate sum score if any items missing
-    ls3_lonely = if_else(ls3_tot >= 6, 1, 0, NA_real_), # dichotomize scores (>=6: lonely, 3-5: not lonely)
-    countNA_ls3 = rowSums(is.na(across(starts_with("ls_")))), # count how many items are missing (out of 3) for LS
-    
-    ## Flourish Index (FI) and Secure Flourish Index (SFI)
-    ## Domain-specific indices 
-    # D1. Happiness and life satisfaction
-    sfi_d1 = rowMeans(across(num_range("sfi", c(1, 2))), na.rm=FALSE),  # For now set to FALSE so domain score not calculated if an item is missing
-    # D2. Mental and physical health
-    sfi_d2 = rowMeans(across(num_range("sfi", c(3, 4))), na.rm=FALSE),
-    # D3. Meaning and purpose
-    sfi_d3 = rowMeans(across(num_range("sfi", c(5, 6))), na.rm=FALSE),
-    # D4. Character and virtue
-    sfi_d4 = rowMeans(across(num_range("sfi", c(7, 8))), na.rm=FALSE),
-    # D5. Close social relationships
-    sfi_d5 = rowMeans(across(num_range("sfi", c(9, 10))), na.rm=FALSE),
-    # D6. Financial and material stability
-    sfi_d6 = rowMeans(across(num_range("sfi", c(11, 12))), na.rm=FALSE),
-    # FI total score (mean of first 5 domain indices)
-    fi_tot = rowMeans(across(num_range("sfi_d", c(1:5))), na.rm=FALSE), # For now set to FALSE so total score not calculated if any domain score is missing
-    # SFI total score (mean of all 6 domain indices)
-    sfi_tot = rowMeans(across(num_range("sfi_d", c(1:6))), na.rm=FALSE), 
-    
-    countNA_sfi12 = rowSums(is.na(across(num_range("sfi", c(1:12))))), # count how many items are missing (out of 12) for SFI
-    countNA_fi10 = rowSums(is.na(across(num_range("sfi", c(1:10))))), # count how many items are missing (out of 10) for FI
-  )
+    mbi_dp_sum = rowSums(across(num_range("mbi", mbi_dp)), na.rm = T),
+    mbi_dp_n_na_items = rowSums(is.na(across(num_range("mbi", mbi_dp)))), # count how many items are missing (out of 5) for DP
+    mbi_dp_bin_na_items = ifelse(mbi_dp_n_na_items,1,0),
 
-# Check data for only the survey instruments -----------------------------------
-data_check <- data2 %>%
-  select(identifier, redcap_event_name, starts_with("mbi"), starts_with("scs"), starts_with("miss"), 
-         starts_with("yis"), starts_with("ls"), starts_with("sfi"), starts_with("fi_"), starts_with("countNA_"))
+    mbi_pa_sum = rowSums(across(num_range("mbi", mbi_pa)), na.rm = T),
+    mbi_pa_n_na_items = rowSums(is.na(across(num_range("mbi", mbi_pa)))), # count how many items are missing (out of 8) for PA
+    mbi_pa_bin_na_items = ifelse(mbi_pa_n_na_items,1,0))
 
-# data_check <- data2 %>%
-#   filter(identifier %in% c(26, 41, 100, 122, 146, 150, 172)) %>%
-#   select(identifier, redcap_event_name, starts_with("mbi"))
+# Rearrange Columns so that all MBI related variables are together
+# Removes the redcap calculated scores that were based on means instead of sums
+data %<>%
+  select(identifier:mbi22,
+         mbi_ee_sum:mbi_pa_bin_na_items,
+         everything())
 
-# Checking counts of missing items for MBI scales - 5 participants are missing all items but will be excluded later anyway because randomization not = complete
-# with(data2, table(countNA_mbi_ee9))
-# with(data2, table(countNA_mbi_dp5))
-# with(data2, table(countNA_mbi_pa8))
+data %<>%
+  select(-(mbieemean:mbipamean))
 
-# Check participants missing all items for any scale
-data2 %>%
-  select(identifier, starts_with("countNA_")) %>%
-  filter(countNA_mbi_ee9 == 9 | countNA_mbi_dp5 == 5 | countNA_mbi_pa8 == 8 | countNA_scssf12 == 12 | countNA_misshp10 == 10 | countNA_yis8 == 8 |
-         countNA_ls3 == 3 | countNA_sfi12 == 12 | countNA_fi10 == 10)
+## Self-Compassion Scale - Short form (SCS-SF) ---------------------------------
+# https://self-compassion.org/wp-content/uploads/2021/03/SCS-SF-information.pdf
+# Create new item variables with reverse scoring for items 1, 4, 8, 9, 11, 12
 
-# Check participants missing all items on all scales
-data2 %>%
-  select(identifier, starts_with("countNA_")) %>%
-  filter(countNA_mbi_ee9 == 9 & countNA_mbi_dp5 == 5 & countNA_mbi_pa8 == 8 & countNA_scssf12 == 12 & countNA_misshp10 == 10 & countNA_yis8 == 8 &
-           countNA_ls3 == 3 & countNA_sfi12 == 12 & countNA_fi10 == 10)
+# Note: at least one participant (110) only answered one item (scs1) so if we allow any number of missing items, 
+# that person's over-identification and total scores are both based on that one item 
 
-# Check any other participants missing at least one item on any scale (excluding those missing all items on all scales)
-data2 %>%
-  select(identifier, starts_with("countNA_")) %>%
-  filter(countNA_mbi_ee9 >= 1 | countNA_mbi_dp5 >= 1 | countNA_mbi_pa8 >= 1 | countNA_scssf12 >= 1 | countNA_misshp10 >= 1 | countNA_yis8 >= 1 |
-           countNA_ls3 >= 1 | countNA_sfi12 >= 1 | countNA_fi10 >= 1) %>%
-  filter(!(countNA_mbi_ee9 == 9 & countNA_mbi_dp5 == 5 & countNA_mbi_pa8 == 8 & countNA_scssf12 == 12 & countNA_misshp10 == 10 & countNA_yis8 == 8 &
-             countNA_ls3 == 3 & countNA_sfi12 == 12 & countNA_fi10 == 10)) %>%
-  nrow()
+# TO DO: we should decide our own rules for missing items because the scoring instructions don't say 
+# and each subscale is only 2 items so if either is missing then the subscale is one item)
 
-# Check participants missing SFI score but not FI score (because only domain 6 was missing)
-data2 %>%
-  select(identifier, starts_with("sfi_d"), sfi_tot, fi_tot) %>%
-  filter(is.na(sfi_tot)) 
+# Reverse score the scs items
+data %<>%
+  mutate(
+    scs1 = 6 - scs1,
+    scs4 = 6 - scs4,
+    scs8 = 6 - scs8,
+    scs9 = 6 - scs9,
+    scs11 = 6 - scs11,
+    scs12 = 6 - scs12)
 
-# Check participants missing at least 1 but not all YIS items
-data2 %>%
-  select(identifier, countNA_yis8, num_range("yis", c(1:8)), yis_count, yis_ispos) %>%
-  filter(countNA_yis8 >= 1 & countNA_yis8 < 8) 
+# Score the scssf_tot as sums to match Fainstad, 2022 and pilot data
+data %<>%
+  mutate(scssf_sum_tot = rowSums(across(starts_with("scs")), na.rm = T),
+         scssf_n_na_items = rowSums(is.na(across(num_range("scs", c(1:12))))),
+         scssf_bin_na_items = ifelse(scssf_n_na_items > 0, 1, 0))
+
+# Rearrange the columns
+data %<>%
+  select(identifier:scs12,
+         scssf_sum_tot:scssf_bin_na_items,
+         everything())
+
+# Remove the redcap calculated scores for the scsf
+data %<>% 
+  select(-(scsoveridentificationmean:scstotalmean))
 
 # Check participant 110
-data2 %>%
-  select(identifier, starts_with("scssf_"), starts_with("misshp_"), 
-         starts_with("yis_"), starts_with("ls3_"), starts_with("sfi_"), starts_with("fi_")) %>%
-  filter(identifier == 110)
+data %>% filter(identifier == 110) %>% select(starts_with("scssf"))
+
+## Moral Injury Symptom Scale – Healthcare Providers (MISS-HP) -----------------
+# Create new item variables with reverse scoring for items 5, 6, 7, 10
+data %<>%
+  mutate(
+    miss5 = 11 - miss5,
+    miss6 = 11 - miss6,
+    miss7 = 11 - miss7,
+    miss10 = 11 - miss10)
+
+# Score the misshp_tot as the sum of items
+data %<>%
+  mutate(
+    misshp_tot = rowSums(across(num_range("miss", c(1:10))), na.rm = T), 
+    misshp_n_na_items = rowSums(is.na(across(num_range("miss", c(1:10))))), 
+    misshp_bin_na_items = ifelse(misshp_n_na_items > 0, 1, 0))
+
+# Rearrange columns and remove redcap calculated variable
+data %<>%
+  select(identifier:miss10,
+         misshp_tot:misshp_bin_na_items,
+         everything(),
+         -misssum)  
+
+## Young Impostor Scale (YIS) --------------------------------------------------
+# Responding “Yes” to 5 or more of these questions considered a positive for
+# imposter syndrome
+data %<>%
+  mutate(
+    yis_sum = rowSums(across(yis1:yis8), na.rm=T),
+    yis_bin = ifelse(yis_sum > 5, 1, 0),
+    yis_n_na_items = rowSums(is.na(across(yis1:yis8))),
+    yis_bin_na_items = ifelse(yis_n_na_items > 0, 1, 0))
+
+# Rearrange columns
+data %<>%
+  select(identifier:yis8,
+         yis_sum:yis_bin_na_items,
+         everything(),
+         -yissum)
+
+    
+## Three-item Loneliness Scale (LS) --------------------------------------------
+# dichotomize scores (>=6: lonely, 3-5: not lonely)
+data %<>%
+  mutate(
+    ls_sum = rowSums(across(starts_with("ls_")), na.rm=T),
+    ls_bin_lonely = if_else(ls_sum > 5, 1, 0), 
+    ls_n_na_items = rowSums(is.na(across(ls_lack_companionship:ls_isolated))))
+
+# Rearrange columns
+data %<>%
+  select(identifier:ls_isolated,
+         ls_sum:ls_n_na_items,
+         everything(),
+         -lssum)
 
 
+## Flourish Index (FI) and Secure Flourish Index (SFI) -------------------------
+data %<>%
+  mutate(
+    ## Domain-specific indices 
+    # D1. Happiness and life satisfaction
+    sfi_d1 = rowMeans(across(num_range("sfi", c(1, 2))), na.rm = T),
+    
+    # D2. Mental and physical health
+    sfi_d2 = rowMeans(across(num_range("sfi", c(3, 4))), na.rm = T),
+    
+    # D3. Meaning and purpose
+    sfi_d3 = rowMeans(across(num_range("sfi", c(5, 6))), na.rm = T),
+    
+    # D4. Character and virtue
+    sfi_d4 = rowMeans(across(num_range("sfi", c(7, 8))), na.rm = T),
+    
+    # D5. Close social relationships
+    sfi_d5 = rowMeans(across(num_range("sfi", c(9, 10))), na.rm = T),
+    
+    # D6. Financial and material stability
+    sfi_d6 = rowMeans(across(num_range("sfi", c(11, 12))), na.rm = T),
+    
+    # FI total score (mean of first 5 domain indices)
+    fi_tot = rowMeans(across(num_range("sfi_d", c(1:5))), na.rm = T),
+    
+    # SFI total score (mean of all 6 domain indices)
+    sfi_tot = rowMeans(across(num_range("sfi_d", c(1:6))), na.rm = T), 
+    
+    sfi_n_na_items = rowSums(is.na(across(num_range("sfi", c(1:12))))), 
+    fi_n_na_items = rowSums(is.na(across(num_range("sfi", c(1:10))))),
+    sfi_bin_na_items = ifelse(sfi_n_na_items > 0, 1, 0),
+    fi_bin_na_items = ifelse(fi_n_na_items > 0, 1, 0))
 
-
-data <- data2
-
+# Rearrange columns
+data %<>%
+  select(identifier:sfi12,
+         fi_tot:fi_bin_na_items,
+         everything(),
+         sfimean)
 
 
 # Sexual Orientation -----------------------------------------------------------
@@ -290,7 +272,8 @@ data %<>%
          ) %>%
   mutate(sexual_orientation = as_factor(sexual_orientation))
 
-# Check that all remaining values are in fact missing
+# Check that all remaining values are in fact missing for self describe and 0
+# for orient_vars
 data %>%
   filter(redcap_event_name == "pre_arm_1", 
          is.na(sexual_orientation)) %>%
@@ -345,9 +328,6 @@ data %>%
   filter(redcap_event_name == "pre_arm_1", 
          is.na(race_ethnicity)) %>%
   select(all_of(race_vars), race_ethn_self_describe)
-
-
-
 
 
 # Apply Redcap processing ------------------------------------------------------
@@ -412,21 +392,22 @@ out <- data %>%
          years_at_clinic,
          
          mbi_ee_sum,
+         mbi_ee_bin_na_items,
          mbi_dp_sum,
+         mbi_dp_bin_na_items,
          mbi_pa_sum,
-         
-         mbi_sum_ee, # KB: these 3 are same as above, just different variable naming convention for consistency with new SCS-SF variables
-         mbi_sum_dp,
-         mbi_sum_pa,
+         mbi_pa_bin_na_items,
          
          misshp_tot,
-         yissum,
-         yis_ispos,
-         ls3_tot,
+         misshp_bin_na_items,
+         yis_sum,
+         yis_bin,
+         yis_bin_na_items,
+         ls_sum,
+         ls_bin_lonely,
          
-         scssf_tot,
-         scssf_avg_tot,   # KB added these 2: new SCS-SF variables (mean vs sum)
          scssf_sum_tot,
+         scssf_bin_na_items,
          
          fi_tot,
          sfi_tot) %>%
