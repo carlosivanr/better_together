@@ -1,0 +1,338 @@
+---
+title: "Better Together"
+subtitle:  ""
+date: "`r format(Sys.time(), '%B %d %Y')`"
+
+format: docx
+# format: 
+#   html:
+#     toc: true
+
+--embed-resources: true
+--standalone: true
+
+editor: source
+---
+
+```{r program_header, echo=FALSE}
+################################################################################
+# Carlos Rodriguez, PhD. Dept. of Family Medicine, CU Anschutz Medical Campus
+# February 06, 2023
+# Better Together
+################################################################################
+```
+
+
+```{r load_lib, echo=FALSE, warning=FALSE, message=FALSE}
+# Load libraries ---------------------------------------------------------------
+pacman::p_load(REDCapR,
+               here,
+               Hmisc,
+               tidyverse,
+               gtsummary,
+               bstfun,
+               furrr,
+               flextable,
+               magrittr,
+               nlme)
+```
+
+
+```{r load_data, echo=FALSE, warning=FALSE, message=FALSE}
+# Source functions -------------------------------------------------------------
+source(here("scripts", "functions", "make_check_all_table.R"))
+```
+
+
+# Participant Characteristics at Baseline
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Load Data --------------------------------------------------------------------
+load(here("data", "prepped_data.Rdata"))
+
+# Filter to the first time point and only those that are complete in randomization
+# will omit any that are unverified
+data %<>%
+  filter(redcap_event_name == "pre_arm_1") %>%
+  filter(randomization_complete.factor == "Complete") %>%
+  mutate(specialty.factor = factor(specialty.factor)) %>%
+  mutate(specialty.factor = fct_collapse(specialty.factor,
+    `Family Medicine` = c("Family Medicine", "Behavioral Health"),
+    `Other/Prefer not to answer` = c("Other", "Prefer not to answer")))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Demographics -----------------------------------------------------------------
+# age, years, is a two sample t-test
+# all categorical are fisher's exact
+
+# Display demographics at filter(redcap_event_name.factor == "Pre")
+data %>%
+  filter(redcap_event_name.factor == "Pre") %>%
+  select(randomization.factor,
+        age,
+        years_since_training,
+        bhc.factor,
+        specialty.factor,
+        degree.factor,
+        gender_identity.factor,
+        race_ethnicity,
+        sexual_orientation,
+        marital_status.factor,
+        clinical_fte.factor,
+        total_fte.factor) %>%
+  tbl_summary(by = randomization.factor,
+              type = all_continuous() ~ "continuous2",
+              statistic = all_continuous() ~ c("{mean} ({sd})",
+                                               "{median} ({min}, {max})"),
+              missing = "ifany",
+              sort = all_categorical() ~ "frequency",
+              
+              digits = list(all_continuous() ~ 2, all_categorical() ~ c(0, 1)), # KB added this line to set number of decimal places consistently (2 for mean/SD, 1 for percentage)
+              label = list(age ~ "Age",
+                           years_since_training ~ "Years since training",
+                           specialty.factor ~ "Specialty",
+                           bhc.factor ~ "Behavioral health clinician",
+                           degree.factor ~ "Degree",
+                           gender_identity.factor ~ "Gender identity",
+                           race_ethnicity ~ "Race and ethnic identity",
+                           sexual_orientation ~ "Sexual Orientation",
+                           marital_status.factor ~ "Marital status",
+                           clinical_fte.factor ~ "Clinical FTE",
+                           total_fte.factor ~ "Total FTE")) %>%
+  add_p(test = list(all_categorical() ~ "fisher.test"),
+        pvalue_fun = ~style_pvalue(.x, digits = 3)) %>% # KB added this line to set number of decimal places consistently (3 for p-value)
+  add_overall() %>%
+  as_flex_table()
+```
+
+```{r, eval=F}
+# Follow up for the significant omnibus test of Degree across control and intervention
+data %>%
+  filter(redcap_event_name.factor == "Pre") %>%
+  select(randomization.factor,
+        degree.factor) %>%
+   mutate(`MD or DO` = ifelse(degree.factor == "MD or DO", 1,0),
+         PhD = ifelse(degree.factor == "PhD",1,0),
+         PsyD = ifelse(degree.factor == "PsyD",1,0),
+         Other = ifelse(degree.factor == "Other", 1, 0)) %>%
+    select(-degree.factor) %>%
+  tbl_summary(by = randomization.factor) %>%
+  add_p()
+```
+
+# Demographics (living situation)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# living situation -------------------------------------------------------------
+# Create a vector of all of the variable names
+liv_vars <- names(data %>% select(living_situation___0:living_situation___9))
+make_check_all_tbl(data, liv_vars, by_var = "randomization.factor", grouping_label = "Living Situation") %>%
+  add_p(test = all_categorical() ~ "fisher.test",
+        pvalue_fun = ~style_pvalue(.x, digits = 3)) # KB added this line to set number of decimal places consistently (3 for p-value)
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, eval = FALSE}
+# How many selected more than one?
+data %>%
+  select(all_of(liv_vars)) %>%
+  mutate(total = rowSums(across(everything()))) %>%
+  filter(total > 1) %>%
+  nrow()
+```
+
+# Demographics (care giving)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# care_giving ------------------------------------------------------------------
+# Create a vector of all of the variable names
+giv_vars <- names(data %>% select(caregiving___0:caregiving___4))
+make_check_all_tbl(data, giv_vars, by_var = "randomization.factor", grouping_label = "Care Giving") %>%
+  add_p(test = all_categorical() ~ "fisher.test",
+        pvalue_fun = ~style_pvalue(.x, digits = 3)) # KB added this line to set number of decimal places consistently (3 for p-value)
+```
+
+
+# Primary and Secondary Outcomes at Baseline
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Primary
+p1 <- 
+  data %>%
+  filter(redcap_event_name == "pre_arm_1") %>%
+  select(randomization.factor, mbi_ee_sum, mbi_pa_sum, mbi_dp_sum, mbi_bin) %>%
+  tbl_summary(by = randomization.factor,
+              missing = "ifany",
+              type = all_continuous() ~ "continuous2",
+              statistic = all_continuous() ~ c("{mean} ({sd}, {min}-{max})",
+                                               "{median} ({p25}, {p75})"),
+              label = list(mbi_ee_sum ~ "MBI EE",
+                           mbi_pa_sum ~ "MBI PA",
+                           mbi_dp_sum ~ "MBI DP",
+                           mbi_bin ~ "Burnt Out")) %>%
+  add_p() %>%
+  add_overall()
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Secondary
+s2 <- 
+  data %>%
+  filter(redcap_event_name == "pre_arm_1") %>%
+  select(randomization.factor, scssf_sum_tot, yis_sum, yis_bin, ls_sum, misshp_tot, fi_tot, sfi_tot) %>%
+  tbl_summary(by = randomization.factor,
+              missing = "ifany",
+              type = c(scssf_sum_tot, yis_sum, ls_sum, misshp_tot, fi_tot, sfi_tot) ~ "continuous2",
+              statistic = all_continuous() ~ c("{mean} ({sd}, {min} - {max})",
+                                               "{median} ({p25}, {p75})"),
+              label = list(scssf_sum_tot ~ "Self Compassion Scale",
+                           
+                           yis_sum ~ "Young Imposter Syndrome Scale score",
+                           yis_bin ~ "Positive for IS",
+                           ls_sum ~ "UCLA Loneliness Scale",
+                           misshp_tot ~ "Moral Injury Scale",
+                           fi_tot ~ "Flourishing Index",
+                           sfi_tot ~ "Secure Flourishing Index")) %>%
+  add_p() %>%
+  add_overall()
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+tbl_stack(
+  list(p1, s2),
+  group_header = c("Primary outcome: burnout", 
+                   "Secondary outcomes")
+  ) %>%
+  #modify_footnote(all_stat_cols() ~ NA) %>%
+  #modify_column_indent(columns = label, undo = FALSE)
+  modify_table_styling(columns = label, text_format = "indent")
+```
+
+
+# Supplement Table 1: 
+Proportion of demographic variables broken down by those that responded to follow-up survey
+```{r, echo=F}
+# Load Data --------------------------------------------------------------------
+load(here("data", "prepped_data.Rdata"))
+
+# All demographic data is contained in baseline survey
+# Only need to slice by whether or not pre_post_complete
+# data %>%
+#   filter(redcap_event_name == "pre_arm_1") %>%
+#   mutate()
+
+# Collapse Specialty Factor to get new p-values
+data %<>%
+  mutate(specialty.factor = factor(specialty.factor)) %>%
+  mutate(specialty.factor = fct_collapse(specialty.factor,
+    `Family Medicine` = c("Family Medicine", "Behavioral Health"),
+    `Other/Prefer not to answer` = c("Other", "Prefer not to answer")))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+data %>%
+  filter(redcap_event_name.factor == "Pre") %>%
+  select(#department_randomization.factor,
+        age,
+        years_since_training,
+        bhc.factor,
+        specialty.factor,
+        degree.factor,
+        gender_identity.factor,
+        race_ethnicity,
+        sexual_orientation,
+        marital_status.factor,
+        clinical_fte.factor,
+        total_fte.factor,
+        pre_post_complete)  %>%
+  mutate(pre_post_complete.factor = ifelse(pre_post_complete == 1, "Both Surveys Complete", "Pre-Survey Only")) %>%
+  tbl_summary(by = pre_post_complete.factor,
+              type = all_continuous() ~ "continuous2",
+              statistic = list(all_continuous() ~ c("{mean} ({sd})",
+                                               "{median} ({p25}, {p75})",
+                                               "{min} - {max}"),
+                               all_categorical() ~ c("{n}/{N} ({p}%)")),
+              missing = "ifany",
+              sort = all_categorical() ~ "frequency",
+              
+              digits = list(all_continuous() ~ 2, 
+                            all_categorical() ~ c(0, 0, 1)
+                            ), # KB added this line to set number of decimal places consistently (2 for mean/SD, 1 for percentage)
+              label = list(age ~ "Age",
+                           department_randomization.factor ~ "Dept. used for randomization",
+                           years_since_training ~ "Years since training",
+                           specialty.factor ~ "Specialty",
+                           bhc.factor ~ "Behavioral health clinician",
+                           degree.factor ~ "Degree",
+                           gender_identity.factor ~ "Gender identity",
+                           race_ethnicity ~ "Race and ethnic identity",
+                           sexual_orientation ~ "Sexual Orientation",
+                           marital_status.factor ~ "Marital status",
+                           clinical_fte.factor ~ "Clinical FTE",
+                           total_fte.factor ~ "Total FTE")) %>%
+  add_p(test = list(all_categorical() ~ "fisher.test"),
+        pvalue_fun = ~style_pvalue(.x, digits = 3)) %>% # KB added this line to set number of decimal places consistently (3 for p-value)
+  add_overall() %>%
+  add_n() %>%
+  as_flex_table() #%>%
+  # save_as_docx(., path = here("characteristics_at_baseline_by_survey_completion.docx"))
+```
+
+
+
+```{r, eval=F}
+# Check which degree was different
+data %>%
+  filter(redcap_event_name.factor == "Pre") %>%
+  mutate(`MD or DO` = ifelse(degree.factor == "MD or DO", 1, 0),
+         PhD = ifelse(degree.factor == "PhD", 1, 0),
+         PsyD = ifelse(degree.factor == "PsyD" , 1, 0),
+         Other = ifelse(degree.factor == "Other", 1, 0),
+         Prefer_not = ifelse(degree.factor == "Prefer not to answer", 1, 0)) %>%
+  mutate(pre_post_complete.factor = ifelse(pre_post_complete == 1, "Both Surveys Complete", "Pre-Survey Only")) %>%
+  select(pre_post_complete.factor, `MD or DO`:Other) %>%
+  tbl_summary(by = pre_post_complete.factor) %>%
+  add_p()
+
+```
+
+```{r, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+# race_ethnicity ---------------------------------------------------------------
+# Create a vector of all of the variable names
+race_vars <- names(data %>% select(race_ethnicity___1:race_ethnicity___9))
+
+
+make_check_all_tbl(data, race_vars, by_var = "pre_post_complete.factor", "Race/Ethnicity") %>%
+  add_p(test = all_categorical() ~ "fisher.test",
+        pvalue_fun = ~style_pvalue(.x, digits = 3)) # KB added this line to set number of decimal places consistently (3 for p-value)
+```
+
+```{r, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+# sexual_orientation -----------------------------------------------------------
+# Create a vector of all of the variable names
+orient_vars <- names(data %>% select(sexual_orientation___1:sexual_orientation___8))
+make_check_all_tbl(data, orient_vars, by_var = "pre_post_complete.factor", grouping_label = "Sexual Orientation") %>%
+  add_p(test = all_categorical() ~ "fisher.test", pvalue_fun = ~style_pvalue(.x, digits = 3)) # KB added this line to set number of decimal places consistently (3 for p-value)
+```
+
+
+# Demographics (living situation)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# living situation -------------------------------------------------------------
+# Create a vector of all of the variable names
+liv_vars <- names(data %>% select(living_situation___0:living_situation___9))
+make_check_all_tbl(data, liv_vars, by_var = "pre_post_complete.factor", grouping_label = "Living Situation") %>%
+  add_p(test = all_categorical() ~ "fisher.test",
+        pvalue_fun = ~style_pvalue(.x, digits = 3)) # KB added this line to set number of decimal places consistently (3 for p-value)
+```
+
+
+
+
+# Demographics (care giving)
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# care_giving ------------------------------------------------------------------
+# Create a vector of all of the variable names
+giv_vars <- names(data %>% select(caregiving___0:caregiving___4))
+make_check_all_tbl(data, giv_vars, by_var = "pre_post_complete.factor", grouping_label = "Care Giving") %>%
+  add_p(test = all_categorical() ~ "fisher.test",
+        pvalue_fun = ~style_pvalue(.x, digits = 3)) # KB added this line to set number of decimal places consistently (3 for p-value)
+```

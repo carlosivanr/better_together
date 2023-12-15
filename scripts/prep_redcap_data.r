@@ -41,7 +41,7 @@ data <- get_redcap_data(project_id)
 # Each participant is associated with up to 3 distinct events in the redcap data
 # 1) randomization, 2) pre-, and 3) post-intervention. Randomization events will
 # not contain any data for the pre or post outcomes and need to be removed. The
-# randomization event contains the values that indicate wich treatment the 
+# randomization event contains the values that indicate which treatment the 
 # participant was randomized to.
 
 # Filter the unique randomization event variables to a separate data frame
@@ -77,23 +77,38 @@ mbi_dp <- c(5, 10, 11, 15, 22)
 # Personal Accomplishment (PA) subscale: items 4, 7, 9, 12, 17, 18, 19, 21
 mbi_pa <- c(4, 7, 9, 12, 17:19, 21)
 
-# Calculate the sum score, if an item is missing, a total score is still 
-# calculated. Switch na.rm arg from T to F to not allow missing single items
+# If an item is missing, a total score will not be calculated
 # Calculate the number of missing items in each subscale and create a binary
 # variable to indicate if any single item was missing for filtering data 
 data %<>%
   mutate(
-    mbi_ee_sum = rowSums(across(num_range("mbi", mbi_ee)), na.rm = T), # na.rm=T so sum score not calculated if any item is missing
+    mbi_ee_sum = rowSums(across(num_range("mbi", mbi_ee)), na.rm = F), # na.rm=T so sum score not calculated if any item is missing
     mbi_ee_n_na_items = rowSums(is.na(across(num_range("mbi", mbi_ee)))), # count how many items are missing (out of 9) for EE
     mbi_ee_bin_na_items = ifelse(mbi_ee_n_na_items,1,0),
     
-    mbi_dp_sum = rowSums(across(num_range("mbi", mbi_dp)), na.rm = T),
+    mbi_dp_sum = rowSums(across(num_range("mbi", mbi_dp)), na.rm = F),
     mbi_dp_n_na_items = rowSums(is.na(across(num_range("mbi", mbi_dp)))), # count how many items are missing (out of 5) for DP
     mbi_dp_bin_na_items = ifelse(mbi_dp_n_na_items,1,0),
 
-    mbi_pa_sum = rowSums(across(num_range("mbi", mbi_pa)), na.rm = T),
+    mbi_pa_sum = rowSums(across(num_range("mbi", mbi_pa)), na.rm = F),
     mbi_pa_n_na_items = rowSums(is.na(across(num_range("mbi", mbi_pa)))), # count how many items are missing (out of 8) for PA
-    mbi_pa_bin_na_items = ifelse(mbi_pa_n_na_items,1,0))
+    mbi_pa_bin_na_items = ifelse(mbi_pa_n_na_items,1,0)) 
+
+# Create a binary variable for burnout mbi_burned_out
+# Check that the created variable will have the same number NAs as the original
+# sum variable
+data %>%
+  mutate(mbi_bin = ifelse(mbi_ee_sum >= 27, 1, 0)) %>%
+  filter(is.na(mbi_bin)) %>%
+  nrow()
+
+data %>%
+  filter(is.na(mbi_ee_sum)) %>%
+  nrow()
+
+data %<>%
+  mutate(mbi_bin = ifelse(mbi_ee_sum >= 27, 1, 0))
+
 
 # Rearrange Columns so that all MBI related variables are together
 # Removes the redcap calculated scores that were based on means instead of sums
@@ -102,19 +117,14 @@ data %<>%
          mbi_ee_sum:mbi_pa_bin_na_items,
          everything())
 
+# Removes the redcap calculated mbi_means, since they are scored as means 
+# instead sum and prior work was done with sum scores
 data %<>%
   select(-(mbieemean:mbipamean))
 
 ## Self-Compassion Scale - Short form (SCS-SF) ---------------------------------
 # https://self-compassion.org/wp-content/uploads/2021/03/SCS-SF-information.pdf
 # Create new item variables with reverse scoring for items 1, 4, 8, 9, 11, 12
-
-# Note: at least one participant (110) only answered one item (scs1) so if we allow any number of missing items, 
-# that person's over-identification and total scores are both based on that one item 
-
-# TO DO: we should decide our own rules for missing items because the scoring instructions don't say 
-# and each subscale is only 2 items so if either is missing then the subscale is one item)
-
 # Reverse score the scs items
 data %<>%
   mutate(
@@ -127,9 +137,11 @@ data %<>%
 
 # Score the scssf_tot as sums to match Fainstad, 2022 and pilot data
 data %<>%
-  mutate(scssf_sum_tot = rowSums(across(starts_with("scs")), na.rm = T),
+  mutate(scssf_sum_tot = rowSums(across(scs1:scs12), na.rm = F),
          scssf_n_na_items = rowSums(is.na(across(num_range("scs", c(1:12))))),
          scssf_bin_na_items = ifelse(scssf_n_na_items > 0, 1, 0))
+
+max(data$scssf_sum_tot, na.rm = T)
 
 # Rearrange the columns
 data %<>%
@@ -141,8 +153,9 @@ data %<>%
 data %<>% 
   select(-(scsoveridentificationmean:scstotalmean))
 
-# Check participant 110
-data %>% filter(identifier == 110) %>% select(starts_with("scssf"))
+# # Check participant 110
+# data %>% filter(identifier == 110) %>% select(starts_with("scssf"))
+
 
 ## Moral Injury Symptom Scale – Healthcare Providers (MISS-HP) -----------------
 # Create new item variables with reverse scoring for items 5, 6, 7, 10
@@ -156,7 +169,7 @@ data %<>%
 # Score the misshp_tot as the sum of items
 data %<>%
   mutate(
-    misshp_tot = rowSums(across(num_range("miss", c(1:10))), na.rm = T), 
+    misshp_tot = rowSums(across(num_range("miss", c(1:10))), na.rm = F), 
     misshp_n_na_items = rowSums(is.na(across(num_range("miss", c(1:10))))), 
     misshp_bin_na_items = ifelse(misshp_n_na_items > 0, 1, 0))
 
@@ -172,10 +185,17 @@ data %<>%
 # imposter syndrome
 data %<>%
   mutate(
-    yis_sum = rowSums(across(yis1:yis8), na.rm=T),
-    yis_bin = ifelse(yis_sum > 5, 1, 0),
+    yis_sum = rowSums(across(yis1:yis8), na.rm=F),
+    yis_bin = if_else(yis_sum >= 5, 1, 0),
     yis_n_na_items = rowSums(is.na(across(yis1:yis8))),
-    yis_bin_na_items = ifelse(yis_n_na_items > 0, 1, 0))
+    yis_bin_na_items = ifelse(yis_n_na_items > 0, 1, 0),
+    
+    #countNA_yis8 = rowSums(is.na(across(num_range("yis", c(1:8))))), # count how many items are missing (out of 8) - to be used in count of "yes" responses below
+    # yis_count = rowSums(across(num_range("yis", c(1:8))), na.rm=TRUE), # count of "yes" responses - allows missing items
+    #yis_count = if_else(countNA_yis8 == 8, NA_real_, rowSums(across(num_range("yis", c(1:8))), na.rm=F)), # count of "yes" responses - allows missing items, unless all items missing
+    #yis_ispos = if_else(yis_count >= 5, 1, 0, NA_real_)
+  )
+  
 
 # Rearrange columns
 data %<>%
@@ -189,7 +209,7 @@ data %<>%
 # dichotomize scores (>=6: lonely, 3-5: not lonely)
 data %<>%
   mutate(
-    ls_sum = rowSums(across(starts_with("ls_")), na.rm=T),
+    ls_sum = rowSums(across(starts_with("ls_")), na.rm=F),
     ls_bin_lonely = if_else(ls_sum > 5, 1, 0), 
     ls_n_na_items = rowSums(is.na(across(ls_lack_companionship:ls_isolated))))
 
@@ -206,28 +226,28 @@ data %<>%
   mutate(
     ## Domain-specific indices 
     # D1. Happiness and life satisfaction
-    sfi_d1 = rowMeans(across(num_range("sfi", c(1, 2))), na.rm = T),
+    sfi_d1 = rowMeans(across(num_range("sfi", c(1, 2))), na.rm = F),
     
     # D2. Mental and physical health
-    sfi_d2 = rowMeans(across(num_range("sfi", c(3, 4))), na.rm = T),
+    sfi_d2 = rowMeans(across(num_range("sfi", c(3, 4))), na.rm = F),
     
     # D3. Meaning and purpose
-    sfi_d3 = rowMeans(across(num_range("sfi", c(5, 6))), na.rm = T),
+    sfi_d3 = rowMeans(across(num_range("sfi", c(5, 6))), na.rm = F),
     
     # D4. Character and virtue
-    sfi_d4 = rowMeans(across(num_range("sfi", c(7, 8))), na.rm = T),
+    sfi_d4 = rowMeans(across(num_range("sfi", c(7, 8))), na.rm = F),
     
     # D5. Close social relationships
-    sfi_d5 = rowMeans(across(num_range("sfi", c(9, 10))), na.rm = T),
+    sfi_d5 = rowMeans(across(num_range("sfi", c(9, 10))), na.rm = F),
     
     # D6. Financial and material stability
-    sfi_d6 = rowMeans(across(num_range("sfi", c(11, 12))), na.rm = T),
+    sfi_d6 = rowMeans(across(num_range("sfi", c(11, 12))), na.rm = F),
     
     # FI total score (mean of first 5 domain indices)
-    fi_tot = rowMeans(across(num_range("sfi_d", c(1:5))), na.rm = T),
+    fi_tot = rowMeans(across(num_range("sfi_d", c(1:5))), na.rm = F),
     
     # SFI total score (mean of all 6 domain indices)
-    sfi_tot = rowMeans(across(num_range("sfi_d", c(1:6))), na.rm = T), 
+    sfi_tot = rowMeans(across(num_range("sfi_d", c(1:6))), na.rm = F), 
     
     sfi_n_na_items = rowSums(is.na(across(num_range("sfi", c(1:12))))), 
     fi_n_na_items = rowSums(is.na(across(num_range("sfi", c(1:10))))),
@@ -239,7 +259,7 @@ data %<>%
   select(identifier:sfi12,
          fi_tot:fi_bin_na_items,
          everything(),
-         sfimean)
+         -sfimean)
 
 
 # Sexual Orientation -----------------------------------------------------------
@@ -330,13 +350,45 @@ data %>%
   select(all_of(race_vars), race_ethn_self_describe)
 
 
+# Add rows for those who did not submit a post intervention survey -------------
+# Create a dataset where the folks with only one entry at the post time point 
+# will have an added row. Label these rows as "Post" then fill in values of 
+# their DVs with NAs
+
+# Check that all who only have 1 time point have the pre event
+data %>% 
+  filter(identifier %in% (data %>%
+                            group_by(identifier) %>%
+                            count() %>%
+                            filter(n == 1) %>%
+                            pull(identifier))) %>%
+  select(redcap_event_name)
+
+
+# Create the post event rows to append to the data set
+empty_post_rows <- 
+data %>%
+  group_by(identifier) %>%
+  count() %>%
+  filter(n == 1) %>%
+  select(identifier) %>%
+  mutate(redcap_event_name = "post_arm_1",
+         identifier = as.numeric(identifier))
+
+#create a copy of the data up until now to test the data
+backup_data <- data
+
+# zaps all labels, even those needed for downstream tables
+#data <- bind_rows(haven::zap_label(data), empty_post_rows)
+data <- bind_rows(data, empty_post_rows)
+
 # Apply Redcap processing ------------------------------------------------------
 # Applies the downloaded R commands to apply labels, create factored columns,
 # and set levels. Saved in a separate script to improve readability.
 source(here("scripts", "apply_redcap_processing.R")) 
 
-# Set the levels of redcap_event_name.factor to available values only ----------
-# Perform after redcap processing
+# Set the levels of redcap_event_name.factor -----------------------------------
+# Removes the levels of the factor that contain randomization for event
 data %<>%
   mutate(redcap_event_name.factor = factor(redcap_event_name.factor))
 
@@ -357,23 +409,67 @@ data %<>%
                                                          "Prefer not to answer")))
 
 
-# Save Data --------------------------------------------------------------------
+# Specialty --------------------------------------------------------------------
+# Some participants selected Other and provided a free text response for 
+# specialty, Tyra and Carlee reviewed the free text responses and categorized
+# them as shown in the .csv file. 
+# Internal medicine (IM) will be a category which includes GIM, pall care, 
+# geriatrics, heme/onc or “medical oncology”, ID, endo, rheum.
 
-## Save to Rdata ----
-save(data, file = here("data/prepped_data.Rdata"))
+# Load the .csv file,
+fr_text_specialties <- read.csv(here("data", "free_text_specialties_10.30.23.csv"))
 
-## Save the prepped Rdsat to .csv ----
+data <- bind_rows(
+  # Filter out data with "Other" and where specialty .factor is missing to get 
+  # the post timepoint data too.
+  (data %>% 
+    filter(specialty.factor != "Other" | is.na(specialty.factor)) %>%
+     mutate(identifier = as.numeric(identifier))),
+  
+  # Merge data for the participants that selected other
+  (data %>% 
+    filter(specialty.factor == "Other") %>%
+    mutate(identifier = as.numeric(identifier)) %>%
+    left_join(., fr_text_specialties, by = c("identifier" = "Identifier")) %>%
+    mutate(specialty.factor = ifelse(!is.na(specialty.factor), Specialty, specialty.factor)) %>%
+    select(-Specialty))
+)
+
+# Recode the new values, needs verification
+# IM <- General Internal Medicine
+# BH <- Behavioral Health
+# FM <- Family Medicine
+data %<>%
+  mutate(specialty.factor = recode(specialty.factor,
+                                   "BH" = "Behavioral Health",
+                                   "FM" = "Family Medicine",
+                                   "IM" = "Internal Medicine",
+                                   "Palliative Care" = "Internal Medicine",
+                                   "Geriatrics" = "Internal Medicine",
+                                   "General Internal Medicine" = "Internal Medicine"))
+
 data %>%
-  write.csv(., 
-          file = here("data/better_together_prepped_data.csv"),
-          row.names = FALSE)
+  select(specialty.factor) %>%
+  table()
+                                     
 
-## Save to .csv for SAS ----
+# Set aside labels for renaming columns
 ## These demographic variables  will need modification to replace the 
 ## name with the label
 out_demo <- data %>% 
   select(living_situation___0:living_situation___9,
          caregiving___0:caregiving___4)
+
+
+# Save Data --------------------------------------------------------------------
+# ## Save the prepped Rdsat to .csv ----
+# data %>%
+#   write.csv(., 
+#           file = here("data/better_together_prepped_data.csv"),
+#           row.names = FALSE)
+
+## Save to .csv for SAS ----
+
 
 ### Convert all NAs to a dot (".") for SAS ----
 out <- data %>%
@@ -397,6 +493,7 @@ out <- data %>%
          mbi_dp_bin_na_items,
          mbi_pa_sum,
          mbi_pa_bin_na_items,
+         mbi_bin,
          
          misshp_tot,
          misshp_bin_na_items,
@@ -411,6 +508,8 @@ out <- data %>%
          
          fi_tot,
          sfi_tot) %>%
+  arrange(identifier, redcap_event_name.factor) %>%
+  mutate(specialty.factor = factor(specialty.factor)) %>%
   mutate_if(is.numeric, ~ifelse(is.na(.), ".", .))%>%
   mutate_if(is.factor, ~fct_explicit_na(., na_level = "."))
 
@@ -441,15 +540,75 @@ cols_to_fill <- c("age",
                   "bhc",
                   "degree",
                   "years_since_training",
-                  "years_at_clinic")
+                  "years_at_clinic",
+                  "randomization"
+                  )
 
 # Modify the columns in a for-loop
 for (i in 1:length(cols_to_fill)){
   out <<- fill_values(out, cols_to_fill[i])
 }
 
+### Arrange by identifier ----
+# out %>%
+#   arrange(identifier, redcap_event_name)
+
+### Create a binary variable to indicate whether or not they completed the 
+# follow up
+out %<>%
+  mutate(pre_post_complete = ifelse(identifier %in% empty_post_rows$identifier, 0, 1))
+
 ### Write out data set----
 out %>%
   write.csv(., 
           file = here("data/better_together_sas_data.csv"),
           row.names = FALSE)
+
+
+
+# ## Save to Rdata ----
+data <- 
+  left_join(data, (out %>% select(identifier, redcap_event_name, pre_post_complete)), by = c("identifier", "redcap_event_name.factor" = "redcap_event_name"))
+
+data %<>%
+  arrange(identifier, redcap_event_name.factor)
+  
+  
+# Set the columns that have values to fill in
+cols_to_fill <- c("age" ,
+                  "gender_identity.factor",
+                  "race_ethnicity",
+                  "sexual_orientation",
+                  "department_randomization.factor",
+                  "specialty.factor",
+                  "bhc.factor",
+                  "degree.factor",
+                  "years_since_training",
+                  "years_at_clinic",
+                  "randomization.factor"
+                  )
+
+# Modify the columns in a for-loop
+for (i in 1:length(cols_to_fill)){
+  data <- fill_values(data, cols_to_fill[i])
+}
+
+
+# # Set the outliers to keep track of sample sizes for analyses
+# Values came from values in SAS which was used to determine outliers
+data %<>%
+  mutate(mbi_dp_sum_out = ifelse(mbi_dp_sum >= 23 & redcap_event_name.factor == "Post" & randomization.factor == "Intervention", 1, 0))
+
+data %<>%
+  mutate(scssf_sum_tot_out = ifelse(scssf_sum_tot >= 54 & redcap_event_name.factor == "Pre" & randomization.factor == "Waitlist", 1, 0)) %>%
+  mutate(scssf_sum_tot_out = ifelse(scssf_sum_tot >= 57 & redcap_event_name.factor == "Pre" & randomization.factor == "Intervention", 1, scssf_sum_tot_out)) #%>%
+
+data %<>%
+  mutate(fi_tot_out = ifelse(fi_tot <= 2.5 & redcap_event_name.factor == "Pre" & randomization.factor == "Waitlist", 1, 0)) #%>%
+  #mutate(fi_tot_out = ifelse(fi_tot >= 9 & redcap_event_name.factor == "Pre" & randomization.factor == "Intervention", 1, fi_tot_out))
+
+data %<>%
+  mutate(sfi_tot_out = ifelse(sfi_tot <= 3.083 & redcap_event_name.factor == "Pre" & randomization.factor == "Waitlist", 1, 0)) #%>%
+  # mutate(sfi_tot_out = ifelse(sfi_tot >= 9 & redcap_event_name.factor == "Pre" & randomization.factor == "Intervention", 1, sfi_tot_out))
+
+save(data, file = here("data/prepped_data.Rdata"))
