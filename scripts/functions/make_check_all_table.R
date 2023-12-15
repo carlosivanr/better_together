@@ -8,15 +8,15 @@
 # This wrapper was created to generate frequency tables for RedCap data that are
 # check all that apply. For example, in questions of race and ethnicity, 
 # participants can select several options because they're not mutually 
-# exclusive. In order to display these sorts of tables, each option must be a
-# binary indicatory (0 or 1) in its own column (wide format). 
+# exclusive. In order to display these type of data, each option must be a
+# binary indicator (0 or 1) in its own column (wide format). 
 
 # Inputs:
 # data, the data set containing the check all that apply variables. All variables
 #   should be prepared as binary indicators prior to using as input
 # vars, a character vector of the check all that apply variable names
 # by_var, an optional variable to display the data broken apart by an additional
-#   variable, such as sex, intervention, etc
+#   variable, such as sex, intervention, etc.
 # grouping_label, a character string to label the input variables
 
 # Requires: gtsummary, tidyverse, rlang, tibble packages
@@ -42,7 +42,7 @@ make_check_all_tbl <- function(data, vars, by_var = NULL, grouping_label, pct_di
                 )
   
   # Create a named set of arguments --------------------------------------------
-  # unpacked add_variable_grouping() from bstfun bc couldn't get the
+  # unpacked add_variable_grouping() function from bstfun bc couldn't get the
   # name of the vector to be named dynamically
   dots <- rlang::dots_list("grouping_label" = ordered_vars)
   #rlang::is_named(dots)
