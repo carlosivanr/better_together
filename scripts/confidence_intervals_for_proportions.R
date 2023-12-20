@@ -1,3 +1,10 @@
+################################################################################
+# Carlos Rodriguez, PhD. Dept. of Family Medicine, CU Anschutz Medical Campus
+# December 11, 2023
+# Better Together
+################################################################################
+
+
 # Load libraries ---------------------------------------------------------------
 pacman::p_load(REDCapR,
                here,

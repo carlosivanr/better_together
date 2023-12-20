@@ -1,0 +1,309 @@
+---
+title: "Better Together"
+subtitle:  ""
+date: "`r format(Sys.time(), '%B %d %Y')`"
+format: 
+  html:
+    toc: true
+
+--embed-resources: true
+--standalone: true
+
+editor: source
+---
+
+```{r program_header, echo=FALSE}
+################################################################################
+# Carlos Rodriguez, PhD. Dept. of Family Medicine, CU Anschutz Medical Campus
+# July 20, 2023
+
+# Better Together
+# Examine mechanisms of missingness
+################################################################################
+```
+
+```{r load_lib, echo=FALSE, warning=FALSE, message=FALSE}
+# Load libraries ---------------------------------------------------------------
+pacman::p_load(REDCapR,
+               here,
+               Hmisc,
+               tidyverse,
+               gtsummary,
+               bstfun,
+               furrr,
+               flextable,
+               magrittr,
+               nlme)
+```
+
+```{r load data for pre-post analyses, echo = FALSE}
+# Load Data --------------------------------------------------------------------
+load(here("data", "prepped_data.Rdata"))
+```
+
+```{r pre_post_table_function, echo = FALSE}
+# pre_post_tab <- function(variable, data){
+#   
+#   # Concatenate each variable with services sum(dv) and practice (id)
+#   variables <- c(variable, 
+#             "randomization.factor", 
+#             "redcap_event_name.factor")
+#   
+#   # Subset the data into a temporary df
+#   temp <- 
+#     data %>%
+#     select(all_of(variables))
+#   
+#   # Create a table
+#   temp %>% 
+#   tbl_strata(
+#     strata = redcap_event_name.factor,
+#     .tbl_fun = 
+#       ~.x %>%
+#       tbl_summary(
+#         by = randomization.factor,
+#         type = list(!!rlang::sym(variable) ~ "continuous2"),
+#         digits = all_continuous() ~ 2, 
+#         statistic = !!rlang::sym(variable) ~ c("{median} ({p25}, {p75})", 
+#                                 "{mean} ({sd})")
+#         ) %>%
+#       add_overall()
+#     )
+#   
+# }
+```
+
+## MBI Emotional Exhaustion
+```{r, mbi_ee_sum_tab, warning=FALSE, message=FALSE, echo = FALSE}
+#pre_post_tab("mbi_ee_sum", data)
+```
+
+### Mechanisms of Missingness
+```{r, missing continuous function, echo = FALSE}
+check_missing_cont <- function(var, data){
+
+  # Set the input dependent variable to display
+  var_name <- str_c("complete_", var)
+      
+  # Create a variable to indicate if there is a follow up response
+  complete_response <- 
+    data %>%
+    select(identifier, !!rlang::sym(var)) %>%
+    drop_na(!!rlang::sym(var)) %>%
+    group_by(identifier) %>%
+    count() %>%
+    filter(n == 2) %>%
+    pull(identifier)
+  
+  # Create a variables that indicates if someone is complete or not for the !!rlang::sym(var)
+  temp <- data %<>%
+    mutate("{var_name}" := ifelse(identifier %in% complete_response, 1, 0))
+  
+  # Table for gender identity
+  tab_gend <- temp %>%
+    group_by(identifier) %>%
+    slice_head() %>%
+    ungroup() %>%
+    mutate(gender_identity.factor = fct_na_value_to_level(gender_identity.factor, "missing")) %>%
+    select(!!rlang::sym(var_name), gender_identity.factor) %>%
+    tbl_summary(by = gender_identity.factor) %>%
+    add_p() %>%
+    add_overall() %>%
+    modify_caption("**Gender Identity**")
+  
+    
+  # Table for department
+  tab_dept <- temp %>%
+    group_by(identifier) %>%
+    slice_head() %>%
+    ungroup() %>%
+    mutate(department_randomization.factor = fct_na_value_to_level(department_randomization.factor, "missing")) %>%
+    select(!!rlang::sym(var_name), department_randomization.factor) %>%
+    tbl_summary(by = department_randomization.factor) %>%
+    add_p() %>%
+    add_overall() %>%
+    modify_caption("**Department**")
+
+    
+  # Table for specialty  
+  tab_spec <- temp %>%
+    group_by(identifier) %>%
+    slice_head() %>%
+    ungroup() %>%
+    mutate(specialty.factor = fct_na_value_to_level(specialty.factor, "missing")) %>%
+    select(!!rlang::sym(var_name), specialty.factor) %>%
+    tbl_summary(by = specialty.factor) %>%
+    add_p() %>%
+    add_overall() %>%
+    modify_caption("**Specialty**")
+  
+  
+  # Table for behavioral health clinician
+  tab_bhc <- temp %>%
+    group_by(identifier) %>%
+    slice_head() %>%
+    ungroup() %>%
+    mutate(bhc.factor = fct_na_value_to_level(bhc.factor, "missing")) %>%
+    select(!!rlang::sym(var_name), bhc.factor) %>%
+    tbl_summary(by = bhc.factor) %>%
+    add_p() %>%
+    add_overall() %>%
+    modify_caption("**Behavioral Health Clinician**")
+  
+  # Table for degree
+  tab_degr <- temp %>%
+    group_by(identifier) %>%
+    slice_head() %>%
+    ungroup() %>%
+    mutate(degree.factor = fct_na_value_to_level(degree.factor, "missing")) %>%
+    select(!!rlang::sym(var_name), degree.factor) %>%
+    tbl_summary(by = degree.factor) %>%
+    add_p() %>%
+    add_overall() %>%
+    modify_caption("**Degree**")
+  
+  # Table for clinical fte
+  tab_fte <- temp %>%
+    group_by(identifier) %>%
+    slice_head() %>%
+    ungroup() %>%
+    mutate(clinical_fte.factor = fct_na_value_to_level(clinical_fte.factor, "missing")) %>%
+    select(!!rlang::sym(var_name), clinical_fte.factor) %>%
+    tbl_summary(by = clinical_fte.factor) %>%
+    add_p() %>%
+    add_overall() %>%
+    modify_caption("**Clinical FTE**")
+  
+  
+  # -------------------------------------------
+  # Continuous variables ----
+  # Complete ~ age (t-test)
+  tab_cont_vars <- temp %>%
+    mutate("{var_name}" := ifelse(identifier %in% complete_response, "Complete", "Incomplete")) %>%
+    group_by(identifier) %>%
+    slice_head() %>%
+    ungroup() %>%
+    select(!!rlang::sym(var_name), age, years_at_clinic, years_since_training) %>%
+    tbl_summary(by = !!rlang::sym(var_name),
+                digits = everything() ~ 2,
+                statistic = list(everything()  ~ "{mean} ({sd})")) %>%
+    add_p(everything() ~ "t.test",
+          test.args = everything() ~ list(var.equal = TRUE)) %>%
+    add_overall() %>%
+    modify_caption("**Age, Years at clinic, and Years since training**")
+  
+  return(
+    list(tab_gend,
+         tab_dept,
+         tab_spec,
+         tab_bhc,
+         tab_degr,
+         tab_fte,
+         tab_cont_vars)
+    )
+}
+```
+
+```{r, echo=FALSE}
+mbi_ee_sum_misn_tabs <- check_missing_cont("mbi_ee_sum", data)
+```
+
+```{r, results='asis'}
+for (i in 1:7){
+  print(mbi_ee_sum_misn_tabs[[i]])
+  }
+```
+
+## MBI Deporsonalization
+### Mechanisms of Missingness
+```{r, echo=FALSE}
+mbi_dp_sum_misn_tabs <- check_missing_cont("mbi_dp_sum", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(mbi_dp_sum_misn_tabs[[i]])
+  }
+```
+
+## MBI Personal Accomplishment
+### Mechanisms of Missingness
+```{r, echo=FALSE}
+mbi_pa_sum_misn_tabs <- check_missing_cont("mbi_pa_sum", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(mbi_pa_sum_misn_tabs[[i]])
+  }
+```
+
+## MISS HP
+### Mechanisms of Missingness
+```{r, echo=FALSE}
+misshp_tot_misn_tabs <- check_missing_cont("misshp_tot", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(misshp_tot_misn_tabs[[i]])
+  }
+```
+
+## YIS
+### Mechanisms of Missingness
+```{r, echo=FALSE}
+yis_misn_tabs <- check_missing_cont("yissum", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(yis_misn_tabs[[i]])
+  }
+```
+
+## Loneliness
+### Mechanisms of Missingness
+```{r, echo=FALSE}
+ls3_misn_tabs <- check_missing_cont("ls3_lonely", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(ls3_misn_tabs[[i]])
+  }
+```
+
+## Self-Compassion
+### Mechanisms of Missingness
+```{r, echo=FALSE}
+scssf_misn_tabs <- check_missing_cont("scssf_tot", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(scssf_misn_tabs[[i]])
+  }
+```
+
+## Flourshing/Secure Flourishing Indices
+### Mechanisms of Missingness
+```{r, echo=FALSE}
+fi_misn_tabs <- check_missing_cont("fi_tot", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(fi_misn_tabs[[i]])
+  }
+```
+
+```{r, echo=FALSE}
+sfi_misn_tabs <- check_missing_cont("sfi_tot", data)
+```
+
+```{r, results = "asis"}
+for (i in 1:7){
+  print(sfi_misn_tabs[[i]])
+  }
+```
